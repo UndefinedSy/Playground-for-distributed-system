@@ -43,6 +43,12 @@ type ApplyMsg struct {
 	CommandIndex int
 }
 
+type Entry struct {
+	term 	int
+	index	int
+	data	[]byte
+}
+
 //
 // A Go object implementing a single Raft peer.
 //
@@ -53,6 +59,22 @@ type Raft struct {
 	me        int                 // this peer's index into peers[]
 	dead      int32               // set by Kill()
 
+	// Your data here (2A, 2B, 2C).
+	
+	// generic persistent state
+	currentTerm int
+	votedFor	int
+	log			[]*Entry	
+	// generic persistent state
+
+	// generic volatile state
+	commitIndex	int
+	lastApplied	int
+	// generic volatile state
+
+	// leader's volatile state
+	nextIndex	[]int
+	matchIndex	[]int
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
@@ -234,6 +256,18 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.me = me
 
 	// Your initialization code here (2A, 2B, 2C).
+	
+	// persistent state
+
+	// persistent state on all servers
+
+	// volatile state
+
+	// Your initialization code here (2A, 2B, 2C).
+
+	// volatile state on leader
+
+	// volatile state on leader
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
