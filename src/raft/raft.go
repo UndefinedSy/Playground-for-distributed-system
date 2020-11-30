@@ -21,6 +21,8 @@ import "sync"
 import "sync/atomic"
 import "../labrpc"
 
+import "time"
+
 // import "bytes"
 // import "../labgob"
 
@@ -49,6 +51,15 @@ type Entry struct {
 	data	[]byte
 }
 
+type Role int
+const (
+	Learner 	Role = 0
+	Candidate	Role = 1
+	leader		Role = 2
+)
+
+const electionTimeout = 450 * time.Microsecond
+
 //
 // A Go object implementing a single Raft peer.
 //
@@ -75,6 +86,15 @@ type Raft struct {
 	// leader's volatile state
 	nextIndex	[]int
 	matchIndex	[]int
+	// leader's volatile state
+
+	// Self-defined state
+	currentLeader	int
+	currentRole		Role
+	lastActivity	time.Time
+	// Self-defined state
+
+
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
@@ -138,6 +158,10 @@ func (rf *Raft) readPersist(data []byte) {
 // field names must start with capital letters!
 //
 type RequestVoteArgs struct {
+	term			int
+	candidateId		int
+	lastLogIndex	int
+	lastLogIndex	int
 	// Your data here (2A, 2B).
 }
 
@@ -146,6 +170,8 @@ type RequestVoteArgs struct {
 // field names must start with capital letters!
 //
 type RequestVoteReply struct {
+	term		int
+	voteGranted	bool
 	// Your data here (2A).
 }
 
@@ -237,6 +263,23 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
+func timeoutThread(rf *Raft) {
+	while 1 {
+		if currentRole == Leader {
+			time.Sleep(electionTimeout)
+		}
+	
+		if time.Now().sub(rf.lastActivity) > electionTimeout && rf.votedFor == -1 {
+			rf.currentTerm++
+			rd.votedFor = me
+			votesObtained := 1
+			for peerIndex, peer := range rf.peers {
+				go rf.RequestVote
+			}
+		}
+	}
+}
+
 //
 // the service or tester wants to create a Raft server. the ports
 // of all the Raft servers (including this one) are in peers[]. this
@@ -258,7 +301,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// Your initialization code here (2A, 2B, 2C).
 	
 	// persistent state
-
+	rf.votedFor = -1
 	// persistent state on all servers
 
 	// volatile state
