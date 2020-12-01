@@ -161,7 +161,7 @@ type RequestVoteArgs struct {
 	term			int
 	candidateId		int
 	lastLogIndex	int
-	lastLogIndex	int
+	lastLogTerm		int
 	// Your data here (2A, 2B).
 }
 
@@ -180,6 +180,50 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	
+	reply.term = rf.currentTerm
+	reply.voteGranted = false
+
+	util.DPrintf("RaftNode[%d] Handle RequestVote, CandidatesId[%d] Term[%d] CurrentTerm[%d] LastLogIndex[%d] LastLogTerm[%d] votedFor[%d]",
+		rf.me, args.CandidateId, args.Term, rf.currentTerm, args.LastLogIndex, args.LastLogTerm, rf.votedFor)
+	defer func() {
+		util.DPrintf("RaftNode[%d] Return RequestVote, CandidatesId[%d] Term[%d] currentTerm[%d] VoteGranted[%v] ", rf.me, args.CandidateId,
+			args.Term, rf.currentTerm, reply.VoteGranted)
+	}()
+
+	if args.term < rf.currentTerm {
+		util.DPrintf("requester(%d)'s term[%d] < local(%d) term[%d]",
+					 args.candidateId, args.term, rf.me, rf.currentTerm)
+		return
+	}
+
+	if rf.votedFor != null && rf.votedFor != args.candidateId {
+		util.DPrintf("this raft instance(%d) has already voted other candidate(%d)",
+					 rf.me, rf.votedFor)
+		return
+	}
+
+	var localLastLogIndex, localLastLogTerm int
+	localLogLength = len(rf.log)
+	if localLogLength == 0 {
+		localLastLogIndex = 0
+		localLastLogTerm = 0
+	} else {
+		localLastLogIndex = rf.log[localLogLength - 1].index
+		localLastLogTerm = rf.log[localLogLength - 1].term
+	} 
+
+	if (localLastLogTerm <= args.lastLogTerm) {
+		if (localLastLogIndex <= args.localLastLogIndex) {
+			rf.votedFor = args.candidateId
+			reply.voteGranted = true
+		}
+	}
+
+	return
+	// Your code here (2A, 2B).
 }
 
 //
@@ -194,15 +238,17 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 //
 // The labrpc package simulates a lossy network, in which servers
 // may be unreachable, and in which requests and replies may be lost.
-// Call() sends a request and waits for a reply. If a reply arrives
-// within a timeout interval, Call() returns true; otherwise
-// Call() returns false. Thus Call() may not return for a while.
+// Call() sends a request and waits for a reply. 
+// 
+// If a reply arrives within a timeout interval, Call() returns true; 
+// otherwise Call() returns false. Thus Call() may not return for a while.
+// 
 // A false return can be caused by a dead server, a live server that
 // can't be reached, a lost request, or a lost reply.
 //
 // Call() is guaranteed to return (perhaps after a delay) *except* if the
 // handler function on the server side does not return.  Thus there
-// is no need to implement your own timeouts around Call().
+// is **no need to implement your own timeouts** around Call().
 //
 // look at the comments in ../labrpc/labrpc.go for more details.
 //
@@ -264,17 +310,38 @@ func (rf *Raft) killed() bool {
 }
 
 func timeoutThread(rf *Raft) {
-	while 1 {
+	for {
 		if currentRole == Leader {
 			time.Sleep(electionTimeout)
 		}
-	
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
 		if time.Now().sub(rf.lastActivity) > electionTimeout && rf.votedFor == -1 {
 			rf.currentTerm++
 			rd.votedFor = me
 			votesObtained := 1
-			for peerIndex, peer := range rf.peers {
-				go rf.RequestVote
+			
+			replys := make([]RequestVoteReply, len(rf.peers))
+
+			var localLastLogIndex, localLastLogTerm int
+			logLength = len(rf.log)
+			if logLength == 0 {
+				localLastLogIndex = 0
+				localLastLogTerm = 0
+			} else {
+				localLastLogIndex = rf.log[logLength - 1].index
+				localLastLogTerm = rf.log[logLength - 1].term
+			}
+
+			requestVoteArgs := &RequestVoteArgs {
+				term: 			rf.currentTerm
+				candidateId: 	rf.me
+				lastLogIndex: 	localLastLogIndex
+				lastLogTerm:	localLastLogTerm 
+			}
+
+			for peerIndex, _ := range rf.peers {
+				go rf.sendRequestVote(peerIndex, requestVoteArgs, &replys[peerIndex])
 			}
 		}
 	}
