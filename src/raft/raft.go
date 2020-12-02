@@ -340,8 +340,29 @@ func timeoutThread(rf *Raft) {
 				lastLogTerm:	localLastLogTerm 
 			}
 
+			requestVoteResultChan := make(chan RequestVoteReply, len(rf.peers) - 1)
+
 			for peerIndex, _ := range rf.peers {
-				go rf.sendRequestVote(peerIndex, requestVoteArgs, &replys[peerIndex])
+				go func(peerIndex int) {
+					if rf.me == peerIndex {
+						return
+					}
+					
+					ok := rf.sendRequestVote(peerIndex, requestVoteArgs, &replys[peerIndex])
+				
+					if ok {
+						requestVoteResultChan<- &replys[peerIndex]
+					}
+					else {
+						requestVoteResultChan<- nil
+					}
+
+				}(peerIndex)
+			}
+
+			for i := 0; i < len(rf.peers) - 1; i++ {
+				requestVoteResult := <-requestVoteResultChan
+
 			}
 		}
 	}
