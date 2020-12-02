@@ -53,9 +53,9 @@ type Entry struct {
 
 type Role int
 const (
-	Learner 	Role = 0
+	Follower 	Role = 0
 	Candidate	Role = 1
-	leader		Role = 2
+	Leader		Role = 2
 )
 
 const electionTimeout = 450 * time.Microsecond
@@ -99,6 +99,25 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
+}
+
+func (rf *Raft) BecomeLeader() {
+	rf.currentRole = Leader
+	rf.currentLeader = me
+
+	// need to boardcast empty AppendEntry()
+}
+
+func (rf *Raft) ReInitFollower(term int) {
+	rf.currentTerm = term
+	rf.currentRole = Follower
+	rf.votedFor = -1
+}
+
+func (rf *Raft) BecomeCandidate() {
+	rf.currentRole = Candidate
+	rf.currentTerm++
+	rf.votedFor = me
 }
 
 // return currentTerm and whether this server
@@ -151,7 +170,7 @@ func (rf *Raft) readPersist(data []byte) {
 }
 
 
-
+//--------------------RequestVote RPC--------------------//
 
 //
 // example RequestVote RPC arguments structure.
@@ -262,6 +281,67 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	return ok
 }
 
+//--------------------RequestVote RPC--------------------//
+
+//=======================================================//
+
+//-------------------AppendEntries RPC-------------------//
+
+type AppendEntriesArgs struct {
+	term			int
+	leaderId		int
+	prevLogIndex	int
+	prevLogTerm		int
+	entries			[]*Entry
+	leaderCommit	int
+}
+
+type AppendEntriesReply struct {
+	term		int
+	success		bool
+}
+
+func (rf *Raft) AppendEntries(args *RequestVoteArgs, reply *RequestVoteReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	reply.term = rf.currentTerm
+	reply.success = false
+
+	if args.term < rf.currentTerm {
+		return
+	}
+
+	rf.ReInitFollower(args.term)
+	rf.lastActivity = time.Now()
+	reply.success = true
+}
+
+func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
+	return ok
+}
+
+//-------------------AppendEntries RPC-------------------//
+
+func (rf *Raft) BoardCastAppendEntries() {
+	appendEntriesArgs := &AppendEntriesArgs {
+		term:		rf.currentTerm
+		leaderId:	rf.me
+	}
+	replys := make(AppendEntriesReply, len(rf.peers) - 1)
+
+	for peerIndex, _ := range rf.peers {
+		go func(peerIndex int) {
+			if rf.me == peerIndex {
+				return
+			}
+			
+			ok := rf.sendAppendEntries(peerIndex, appendEntriesArgs, &replys[peerIndex])
+		
+		}(peerIndex)
+	}
+}
 
 //
 // the service using Raft (e.g. a k/v server) wants to start
@@ -309,20 +389,38 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
+func (rf *Raft) CollectVotes(requestVoteResultChan chan *RequestVoteReply) {
+	participantsNum := len(peers)
+	for i := 0; i < participantsNum - 1; i++ {
+		requestVoteResult := <-requestVoteResultChan
+		if requestVoteResult {
+			if requestVoteResult.voteGranted {
+				votesObtained++
+				if votesObtained > (participantsNum / 2) {
+					BecomeLeader()
+					return
+				}
+			}
+
+			if requestVoteResult.term > currentTerm {
+				ReInitFollower(requestVoteResult.term)
+				// give up requesting vote.
+				return
+			}
+		}
+	}
+}
+
 func timeoutThread(rf *Raft) {
 	for {
-		if currentRole == Leader {
-			time.Sleep(electionTimeout)
-		}
 		rf.mu.Lock()
 		defer rf.mu.Unlock()
-		if time.Now().sub(rf.lastActivity) > electionTimeout && rf.votedFor == -1 {
-			rf.currentTerm++
-			rd.votedFor = me
-			votesObtained := 1
-			
-			replys := make([]RequestVoteReply, len(rf.peers))
 
+		if time.Now().sub(rf.lastActivity) > electionTimeout && rf.votedFor == -1 {
+			rf.BecomeCandidate
+
+			votesObtained := 1
+			replys := make([]RequestVoteReply, len(rf.peers))
 			var localLastLogIndex, localLastLogTerm int
 			logLength = len(rf.log)
 			if logLength == 0 {
@@ -340,7 +438,7 @@ func timeoutThread(rf *Raft) {
 				lastLogTerm:	localLastLogTerm 
 			}
 
-			requestVoteResultChan := make(chan RequestVoteReply, len(rf.peers) - 1)
+			requestVoteResultChan := make(chan *RequestVoteReply, len(rf.peers) - 1)
 
 			for peerIndex, _ := range rf.peers {
 				go func(peerIndex int) {
@@ -360,11 +458,28 @@ func timeoutThread(rf *Raft) {
 				}(peerIndex)
 			}
 
-			for i := 0; i < len(rf.peers) - 1; i++ {
-				requestVoteResult := <-requestVoteResultChan
+			rf.CollectVotes(requestVoteResultChan)
 
-			}
+			// for i := 0; i < len(rf.peers) - 1; i++ {
+			// 	requestVoteResult := <-requestVoteResultChan
+			// 	if requestVoteResult {
+			// 		if requestVoteResult.voteGranted {
+			// 			votesObtained++
+			// 			if votesObtained > (len(rf.peers) / 2) {
+			// 				rf.BecomeLeader()
+			// 				break
+			// 			}
+			// 		}
+
+			// 		if requestVoteResult.term > currentTerm {
+			// 			rf.ReInitFollower(requestVoteResult.term)
+			// 			// give up requesting vote.
+			// 			break
+			// 		}
+			// 	}
+			// }
 		}
+		time.Sleep(electionTimeout)
 	}
 }
 
@@ -399,6 +514,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// volatile state on leader
 
 	// volatile state on leader
+
+	go timeoutThread(rf)
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
