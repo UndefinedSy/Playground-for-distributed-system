@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -28,16 +29,22 @@ func AppendEntriesHandler(rf *Raft, peerIndex int, appendEntriesArgs *AppendEntr
 func AppendEntriesThread(rf *Raft) {
 	for {
 		time.Sleep(10 * time.Millisecond)	// here may need a condition_variable.wait_for
+		rf.condLeader.L.Lock()
+        for rf.currentRole != Leader {
+			/rf.condLeader.Wait()
+		}
 		
-		rf.mu.Lock()
+		// rf.mu.Lock() // is this still necessary
 
 		if rf.currentRole != Leader { 	// here should be a condition variable
-			rf.mu.Unlock()
+			// rf.mu.Unlock()
+			rf.condLeader.L.Unlock()
 			continue
 		}
 
 		if time.Now().Sub(rf.lastHeartbeat) < (HeartBeatTimeout * time.Millisecond) {
-			rf.mu.Unlock()
+			// rf.mu.Unlock()
+			rf.condLeader.L.Unlock()
 			continue
 		}
 
@@ -50,7 +57,8 @@ func AppendEntriesThread(rf *Raft) {
 
 		rf.lastHeartbeat = time.Now()
 	
-		rf.mu.Unlock()
+		rf.condLeader.L.Unlock()
+		
 		for i := 0; i < len(rf.peers); i++ {
 			if rf.me == i {
 				continue

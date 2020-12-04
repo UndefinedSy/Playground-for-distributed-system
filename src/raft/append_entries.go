@@ -1,6 +1,9 @@
 package raft
 
-import "time"
+import (
+	"time"
+	"fmt"
+)
 //-------------------AppendEntries RPC-------------------//
 
 type AppendEntriesArgs struct {
@@ -34,7 +37,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		return
 	}
 
-	if (args.Term > rf.currentTerm) {
+	if (args.Term >= rf.currentTerm) {
 		rf.ReInitFollower(args.Term)
 	}
 

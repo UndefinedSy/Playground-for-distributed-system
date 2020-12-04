@@ -32,7 +32,8 @@ func (rf *Raft) CollectVotes(requestVoteResultChan chan *RequestVoteReply) {
 							me, votesObtained, rf.currentRole)
 					if (rf.currentRole == Candidate) {
 						rf.BecomeLeader()
-						rf.lastHeartbeat = time.Unix(0, 0)
+						// rf.lastHeartbeat = time.Unix(0, 0)
+						rf.condLeader.Signal()
 					}
 					return
 				}

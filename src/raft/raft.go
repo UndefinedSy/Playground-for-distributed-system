@@ -24,6 +24,7 @@ import (
 	"math/rand"
 
 	"../labrpc"
+	"fmt"
 )
 // import "bytes"
 // import "../labgob"
@@ -50,7 +51,7 @@ type ApplyMsg struct {
 type Entry struct {
 	Term 	int
 	Index	int
-	Data	[]byte
+	Command	interface{}
 }
 
 type Role int
@@ -89,6 +90,7 @@ type Raft struct {
 	// leader's volatile state
 
 	// Self-defined state
+	condLeader		*sync.Cond
 	currentLeader	int
 	currentRole		Role
 	lastActivity	time.Time
@@ -142,6 +144,8 @@ func (rf *Raft) GetState() (int, bool) {
 		isleader = true
 	}
 	DPrintf("GetState of Raft[%d]: term[%d], isLeader[%t]", rf.me, rf.currentTerm, isleader)
+
+	fmt.Printf("GetState of Raft[%d]: term[%d], isLeader[%t]\n", rf.me, rf.currentTerm, isleader)
 
 	// Your code here (2A).
 	return term, isleader
@@ -206,7 +210,22 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := true
 
 	// Your code here (2B).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
+	if rf.currentRole != Leader {
+		isLeader = false
+	} else {
+		index = len(rf.log) + 1
+		term = rf.currentTerm
+		// newEntry := &Entry {
+		// 	Index: 	 index,
+		// 	Term:	 term,
+		// 	Command: command,
+		// }
+		// append(rf.log, newEntry)
+	}
+	// Your code here (2B).
 
 	return index, term, isLeader
 }
@@ -249,6 +268,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.peers = peers
 	rf.persister = persister
 	rf.me = me
+
+	rf.condLeader = sync.NewCond(&rf.mu)
 
 	// Your initialization code here (2A, 2B, 2C).
 	
