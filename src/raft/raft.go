@@ -105,25 +105,29 @@ type Raft struct {
 }
 
 func (rf *Raft) BecomeLeader() {
-	rf.currentRole = Leader
+	rf.currentRole 	 = Leader
 	rf.currentLeader = rf.me
+
+	rf.nextIndex 	 = make([]int, len(rf.peers), GetLastLogIndex(rf) + 1)
+	rf.matchIndex	 = make([]int, len(rf.peers))
+
 	DPrintf("Raft[%d] became Leader term[%d]",
 			 rf.me, rf.currentTerm)
 	// need to boardcast empty AppendEntry()
 }
 
 func (rf *Raft) ReInitFollower(term int) {
-	rf.currentTerm = term
-	rf.currentRole = Follower
-	rf.votedFor = -1
+	rf.currentTerm  = term
+	rf.currentRole  = Follower
+	rf.votedFor 	= -1
 	DPrintf("Raft[%d] became Follower term[%d]\n",
 				 rf.me, rf.currentTerm)
 }
 
 func (rf *Raft) BecomeCandidate() {
-	rf.currentRole = Candidate
 	rf.currentTerm++
-	rf.votedFor = rf.me
+	rf.currentRole  = Candidate
+	rf.votedFor 	= rf.me
 	rf.lastActivity = time.Now()
 	DPrintf("Raft[%d] became Candidate term[%d], votedFor[%d] lastActivity[%s]\n",
 			rf.me, rf.currentTerm, rf.votedFor, rf.lastActivity.Format(time.RFC3339))
@@ -218,12 +222,13 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	} else {
 		index = len(rf.log) + 1
 		term = rf.currentTerm
-		// newEntry := &Entry {
-		// 	Index: 	 index,
-		// 	Term:	 term,
-		// 	Command: command,
-		// }
-		// append(rf.log, newEntry)
+		newEntry := &Entry {
+			Index: 	 index,
+			Term:	 term,
+			Command: command,
+		}
+		fmt.Printf("Raft[%d] will append new entry{Index: [%d], Term: [%d], Command:[%T | %v]", rf.me, index, term, command, command)
+		rf.log = append(rf.log, newEntry)
 	}
 	// Your code here (2B).
 

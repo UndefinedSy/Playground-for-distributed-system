@@ -11,3 +11,20 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 	}
 	return
 }
+
+func GetLastLogIndex(rf *Raft) int {
+	if len(rf.log) == 0 {
+		return 0
+	} else {
+		return rf.log[len(rf.log) - 1].Index
+	}
+}
+
+
+func GetLastLogTerm(rf *Raft) int {
+	if len(rf.log) == 0 {
+		return 0
+	} else {
+		return rf.log[len(rf.log) - 1].Term
+	}
+}

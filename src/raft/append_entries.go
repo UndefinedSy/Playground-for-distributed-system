@@ -2,7 +2,6 @@ package raft
 
 import (
 	"time"
-	"fmt"
 )
 //-------------------AppendEntries RPC-------------------//
 

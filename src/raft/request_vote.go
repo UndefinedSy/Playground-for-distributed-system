@@ -51,16 +51,9 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		return
 	}
 
-	var localLastLogIndex, localLastLogTerm int
-	localLogLength := len(rf.log)
-	if localLogLength == 0 {
-		localLastLogIndex = 0
-		localLastLogTerm = 0
-	} else {
-		localLastLogIndex = rf.log[localLogLength - 1].Index
-		localLastLogTerm = rf.log[localLogLength - 1].Term
-	} 
-
+	localLastLogIndex := GetLastLogIndex(rf)
+	localLastLogTerm := GetLastLogTerm(rf)
+	
 	if (localLastLogTerm <= args.LastLogTerm) {
 		if (localLastLogIndex <= args.LastLogIndex) {
 			rf.votedFor = args.CandidateId

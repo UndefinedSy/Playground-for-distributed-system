@@ -1,13 +1,32 @@
 package raft
 
 import (
-	"fmt"
 	"time"
 )
 
 const HeartBeatTimeout = 50 // Milliseconds
 
-func AppendEntriesHandler(rf *Raft, peerIndex int, appendEntriesArgs *AppendEntriesArgs) {
+func AppendEntriesProcessor(rf *Raft, peerIndex int) {
+	rf.mu.Lock()
+	appendEntriesArgs := &AppendEntriesArgs {
+		Term: 			rf.currentTerm,
+		LeaderId:		rf.me,
+		
+		prevLogIndex:	rf.nextIndex[peerIndex] - 1
+		
+		LeaderCommit:	rf.commitIndex,
+	}
+
+	if appendEntriesArgs.prevLogIndex == 0 {
+		appendEntriesArgs.prevLogTerm = 0
+		Entries = rf.log[0:]
+	} else {
+		appendEntriesArgs.prevLogTerm = rf.log[appendEntriesArgs.prevLogIndex - 1].Term
+		Entries = rf.log[(appendEntriesArgs.prevLogIndex - 1):]
+	}
+
+	rf.mu.Unlock()
+
 	reply := &AppendEntriesReply{}
 	ok := rf.sendAppendEntries(peerIndex, appendEntriesArgs, reply)
 	// DPrintf("Raft[%d] - AppendEntriesHandler - to peer[%d] finished:%t\n",
@@ -27,11 +46,11 @@ func AppendEntriesHandler(rf *Raft, peerIndex int, appendEntriesArgs *AppendEntr
 }
 
 func AppendEntriesThread(rf *Raft) {
-	for {
+	for !rf.killed() {
 		time.Sleep(10 * time.Millisecond)	// here may need a condition_variable.wait_for
 		rf.condLeader.L.Lock()
         for rf.currentRole != Leader {
-			/rf.condLeader.Wait()
+			rf.condLeader.Wait()
 		}
 		
 		// rf.mu.Lock() // is this still necessary
@@ -50,11 +69,6 @@ func AppendEntriesThread(rf *Raft) {
 
 		// begin heartbeat
 
-		appendEntriesArgs := &AppendEntriesArgs {
-			Term: 		rf.currentTerm,
-			LeaderId:	rf.me,
-		}
-
 		rf.lastHeartbeat = time.Now()
 	
 		rf.condLeader.L.Unlock()
@@ -63,7 +77,7 @@ func AppendEntriesThread(rf *Raft) {
 			if rf.me == i {
 				continue
 			}
-			go AppendEntriesHandler(rf, i, appendEntriesArgs)
+			go AppendEntriesProcessor(rf, i)
 		}
 	}
 }
