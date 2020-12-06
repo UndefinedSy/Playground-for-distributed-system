@@ -24,13 +24,13 @@ func (rf *Raft) CollectVotes(requestVoteResultChan chan *RequestVoteReply) {
 		if requestVoteResult != nil {
 			if requestVoteResult.VoteGranted {
 				votesObtained++
-				DPrintf("Raft[%d] - CollectVotes - has got 1 vote. Currently have [%d] votes.\n", me, votesObtained)
+				DPrintf(LOG_DEBUG, "Raft[%d] - CollectVotes - has got 1 vote. Currently have [%d] votes.\n", me, votesObtained)
 				if votesObtained > (participantsNum / 2) {
 					rf.mu.Lock()
 					defer rf.mu.Unlock()
-					DPrintf("Raft[%d] - CollectVotes - has got majority[%d] votes, will become a leader | currentRole is: [%d].\n",
+					DPrintf(LOG_INFO, "Raft[%d] - CollectVotes - has got majority[%d] votes, will become a leader | currentRole is: [%d].\n",
 							me, votesObtained, rf.currentRole)
-					if (rf.currentRole == Candidate) {
+					if (rf.currentRole == ROLE_CANDIDATE) {
 						rf.BecomeLeader()
 						// rf.lastHeartbeat = time.Unix(0, 0)
 						rf.condLeader.Signal()
@@ -40,7 +40,7 @@ func (rf *Raft) CollectVotes(requestVoteResultChan chan *RequestVoteReply) {
 			}
 
 			if requestVoteResult.Term > rf.currentTerm {
-				DPrintf("Raft[%d] - CollectVotes - has met a peer with higher Term[%d], will return to a follower.\n", me, requestVoteResult.Term)
+				DPrintf(LOG_INFO, "Raft[%d] - CollectVotes - has met a peer with higher Term[%d], will return to a follower.\n", me, requestVoteResult.Term)
 				rf.mu.Lock()
 				defer rf.mu.Unlock()
 				rf.ReInitFollower(requestVoteResult.Term)
@@ -48,10 +48,10 @@ func (rf *Raft) CollectVotes(requestVoteResultChan chan *RequestVoteReply) {
 				return
 			}
 		} else {
-			DPrintf("Raft[%d] - CollectVotes - there is an error in return value of the sendRequestVote.\n", me)
+			DPrintf(LOG_DEBUG, "Raft[%d] - CollectVotes - there is an error in return value of the sendRequestVote.\n", me)
 		}
 	}
-	DPrintf("Raft[%d] - CollectVotes - obtained [%d] votes and did not become leader, will go back to follower", me, votesObtained)
+	DPrintf(LOG_DEBUG, "Raft[%d] - CollectVotes - obtained [%d] votes and did not become leader, will go back to follower", me, votesObtained)
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	rf.ReInitFollower(rf.currentTerm)
@@ -74,7 +74,7 @@ func ElectionThread(rf *Raft) {
 
 		if (rf.votedFor != -1) {
 			rf.mu.Unlock()
-			DPrintf("Raft[%d] - ElectionThread - has voted to Raft[%d], will give up this round", rf.me, rf.votedFor)
+			DPrintf(LOG_DEBUG, "Raft[%d] - ElectionThread - has voted to Raft[%d], will give up this round", rf.me, rf.votedFor)
 			continue
 		}
 
@@ -102,8 +102,8 @@ func ElectionThread(rf *Raft) {
 			go func(peerIndex int) {
 				reply := &RequestVoteReply{}
 				ok := rf.sendRequestVote(peerIndex, requestVoteArgs, reply)
-				DPrintf("Raft[%d] - ElectionThread - sendRequestVote to [%d] has returned [%t], with reply: %p",
-						rf.me, peerIndex, ok, reply)
+				DPrintf(LOG_DEBUG, "Raft[%d] - ElectionThread - sendRequestVote to [%d] has returned [%t], with reply: %p",
+									rf.me, peerIndex, ok, reply)
 				if ok {
 					requestVoteResultChan<- reply
 				} else {

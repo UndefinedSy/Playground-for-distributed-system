@@ -54,11 +54,15 @@ type Entry struct {
 	Command	interface{}
 }
 
+func (entry *Entry) String() string {
+	return fmt.Sprintf("{Term[%d], Index[%d], Command[%v]}", entry.Term, entry.Index, entry.Command)
+}
+
 type Role int
 const (
-	Follower 	Role = 0
-	Candidate	Role = 1
-	Leader		Role = 2
+	ROLE_FOLLOWER 	Role = 0
+	ROLE_CANDIDATE	Role = 1
+	ROLE_LEADER		Role = 2
 )
 
 //
@@ -97,6 +101,7 @@ type Raft struct {
 	lastHeartbeat	time.Time
 	// Self-defined state
 
+	applyCh			chan ApplyMsg
 
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
@@ -105,32 +110,36 @@ type Raft struct {
 }
 
 func (rf *Raft) BecomeLeader() {
-	rf.currentRole 	 = Leader
+	rf.currentRole 	 = ROLE_LEADER
 	rf.currentLeader = rf.me
 
-	rf.nextIndex 	 = make([]int, len(rf.peers), GetLastLogIndex(rf) + 1)
+	rf.nextIndex 	 = make([]int, len(rf.peers))
 	rf.matchIndex	 = make([]int, len(rf.peers))
 
-	DPrintf("Raft[%d] became Leader term[%d]",
-			 rf.me, rf.currentTerm)
+	for i := range(rf.nextIndex) {
+		rf.nextIndex[i] = GetLastLogIndex(rf) + 1
+	}
+
+	DPrintf(LOG_INFO, "Raft[%d] became Leader term[%d]",
+			 		   rf.me, rf.currentTerm)
 	// need to boardcast empty AppendEntry()
 }
 
 func (rf *Raft) ReInitFollower(term int) {
 	rf.currentTerm  = term
-	rf.currentRole  = Follower
+	rf.currentRole  = ROLE_FOLLOWER
 	rf.votedFor 	= -1
-	DPrintf("Raft[%d] became Follower term[%d]\n",
-				 rf.me, rf.currentTerm)
+	DPrintf(LOG_DEBUG, "Raft[%d] became Follower term[%d]\n",
+				 		rf.me, rf.currentTerm)
 }
 
 func (rf *Raft) BecomeCandidate() {
 	rf.currentTerm++
-	rf.currentRole  = Candidate
+	rf.currentRole  = ROLE_CANDIDATE
 	rf.votedFor 	= rf.me
 	rf.lastActivity = time.Now()
-	DPrintf("Raft[%d] became Candidate term[%d], votedFor[%d] lastActivity[%s]\n",
-			rf.me, rf.currentTerm, rf.votedFor, rf.lastActivity.Format(time.RFC3339))
+	DPrintf(LOG_DEBUG, "Raft[%d] became Candidate term[%d], votedFor[%d] lastActivity[%s]\n",
+						rf.me, rf.currentTerm, rf.votedFor, rf.lastActivity.Format(time.RFC3339))
 }
 
 // return currentTerm and whether this server
@@ -144,12 +153,11 @@ func (rf *Raft) GetState() (int, bool) {
 	defer rf.mu.Unlock()
 
 	term = rf.currentTerm
-	if rf.currentRole == Leader {
+	if rf.currentRole == ROLE_LEADER {
 		isleader = true
 	}
-	DPrintf("GetState of Raft[%d]: term[%d], isLeader[%t]", rf.me, rf.currentTerm, isleader)
-
-	fmt.Printf("GetState of Raft[%d]: term[%d], isLeader[%t]\n", rf.me, rf.currentTerm, isleader)
+	DPrintf(LOG_INFO, "GetState of Raft[%d]: term[%d], isLeader[%t]",
+					   rf.me, rf.currentTerm, isleader)
 
 	// Your code here (2A).
 	return term, isleader
@@ -217,18 +225,19 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	if rf.currentRole != Leader {
+	if rf.currentRole != ROLE_LEADER {
 		isLeader = false
 	} else {
-		index = len(rf.log) + 1
+		index = len(rf.log)
 		term = rf.currentTerm
 		newEntry := &Entry {
 			Index: 	 index,
 			Term:	 term,
 			Command: command,
 		}
-		fmt.Printf("Raft[%d] will append new entry{Index: [%d], Term: [%d], Command:[%T | %v]", rf.me, index, term, command, command)
 		rf.log = append(rf.log, newEntry)
+		DPrintf(LOG_INFO, "Raft[%d] will append new entry{Index: [%d], Term: [%d], Command:[%T | %v]\n",
+						   rf.me, index, term, command, command)
 	}
 	// Your code here (2B).
 
@@ -247,6 +256,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 // should call killed() to check whether it should stop.
 //
 func (rf *Raft) Kill() {
+	DPrintf(LOG_INFO, "Raft[%d] has been killed", rf.me)
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
 }
@@ -280,15 +290,18 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	
 	// persistent state
 	rf.votedFor = -1
+	rf.log = append(rf.log, &Entry{})
 	// persistent state on all servers
 
 	// volatile state
-	rf.currentRole = Follower
+	rf.currentRole = ROLE_FOLLOWER
 	// Your initialization code here (2A, 2B, 2C).
 
 	// volatile state on leader
 
 	// volatile state on leader
+
+	rf.applyCh = applyCh
 
 	rand.Seed(int64(me))
 	go ElectionThread(rf)

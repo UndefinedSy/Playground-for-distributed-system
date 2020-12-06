@@ -370,6 +370,8 @@ func (cfg *config) nCommitted(index int) (int, interface{}) {
 
 		cfg.mu.Lock()
 		cmd1, ok := cfg.logs[i][index]
+		DPrintf(LOG_INFO, "TEST_config - nCommitted - cfg.logs[raft-%d][index-%d] cmd1[%+v], ok[%t] logs{%+v}",
+					   	   i, index, cmd1, ok, cfg.logs[i])
 		cfg.mu.Unlock()
 
 		if ok {
@@ -381,6 +383,8 @@ func (cfg *config) nCommitted(index int) (int, interface{}) {
 			cmd = cmd1
 		}
 	}
+	DPrintf(LOG_INFO, "TEST_config - nCommitted - returns count[%d], cmd[%+v]",
+					   count, cmd)
 	return count, cmd
 }
 

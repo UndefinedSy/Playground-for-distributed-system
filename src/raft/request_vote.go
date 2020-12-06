@@ -22,22 +22,22 @@ type RequestVoteReply struct {
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
 	rf.mu.Lock()
-	DPrintf("Raft[%d] has locked its mutex in RequestVote.\n", rf.me)
+	DPrintf(LOG_TRACE, "Raft[%d] has locked its mutex in RequestVote.\n", rf.me)
 	defer rf.mu.Unlock()
 
 	reply.Term = rf.currentTerm
 	reply.VoteGranted = false
 
-	DPrintf("Raft[%d] Handle RequestVote, CandidatesId[%d] Term[%d] CurrentTerm[%d] LastLogIndex[%d] LastLogTerm[%d] votedFor[%d]\n",
+	DPrintf(LOG_INFO, "Raft[%d] Handle RequestVote, CandidatesId[%d] Term[%d] CurrentTerm[%d] LastLogIndex[%d] LastLogTerm[%d] votedFor[%d]\n",
 			rf.me, args.CandidateId, args.Term, rf.currentTerm, args.LastLogIndex, args.LastLogTerm, rf.votedFor)
 	defer func() {
-		DPrintf("Raft[%d] Return RequestVote, CandidatesId[%d] Term[%d] currentTerm[%d] VoteGranted[%v]\n",
+		DPrintf(LOG_INFO, "Raft[%d] Return RequestVote, CandidatesId[%d] Term[%d] currentTerm[%d] VoteGranted[%v]\n",
 			 	rf.me, args.CandidateId, args.Term, rf.currentTerm, reply.VoteGranted)
 	}()
 
 	if args.Term < rf.currentTerm {
-		DPrintf("requester(%d)'s Term[%d] < local(%d) term[%d]\n",
-					 args.CandidateId, args.Term, rf.me, rf.currentTerm)
+		DPrintf(LOG_DEBUG, "requester(%d)'s Term[%d] < local(%d) term[%d]\n",
+					 		args.CandidateId, args.Term, rf.me, rf.currentTerm)
 		return
 	}
 
@@ -46,8 +46,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	}
 
 	if rf.votedFor != -1 && rf.votedFor != args.CandidateId {
-		DPrintf("Raft[%d] has already voted other candidate(%d)\n",
-					 rf.me, rf.votedFor)
+		DPrintf(LOG_DEBUG, "Raft[%d] has already voted other candidate(%d)\n",
+					 		rf.me, rf.votedFor)
 		return
 	}
 
