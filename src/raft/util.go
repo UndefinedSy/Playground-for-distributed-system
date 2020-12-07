@@ -11,7 +11,7 @@ const (
 	LOG_TRACE	LogLevel = 3
 )
 
-const Debug = 0
+const Debug = 1
 
 func DPrintf(logLevel LogLevel, format string, a ...interface{}) (n int, err error) {
 	if Debug >= logLevel {

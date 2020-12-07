@@ -43,9 +43,20 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.currentLeader = args.LeaderId
 	rf.lastActivity = time.Now()
 	
+	if args.PrevLogIndex < 0 {
+		DPrintf(LOG_ERR, "Raft[%d] - AppendEntries - Index out of range: args.PrevLogIndex[%d] length of rf.log[%d]",
+						  rf.me, args.PrevLogIndex, len(rf.log))
+	}
+
+	if args.PrevLogIndex > GetLastLogIndex(rf) {
+		DPrintf(LOG_INFO, "Raft[%d] Handle AppendEntries, input PrevLogIndex[%d] exceed the lastLogIndex[%d], return false to go back.",
+						  rf.me, args.PrevLogIndex, GetLastLogIndex(rf))
+		return
+	} 
+	
 	if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
-		DPrintf(LOG_DEBUG, "Raft[%d] Handle AppendEntries, input PrevLogTerm[%d] conlicts with the existing one[%d], return false to go back.",
-				rf.me, args.PrevLogTerm, rf.log[args.PrevLogIndex].Term)
+		DPrintf(LOG_INFO, "Raft[%d] Handle AppendEntries, input PrevLogTerm[%d] conlicts with the existing one[%d], return false to go back.",
+						  rf.me, args.PrevLogTerm, rf.log[args.PrevLogIndex].Term)
 		// 可以返回冲突的 term 及该 term 的第一个 index，使 leader 可以直接回退 nextIndex 到合适位置。（到哪没想好）
 		return
 	}

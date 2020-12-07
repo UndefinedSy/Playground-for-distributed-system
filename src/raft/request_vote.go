@@ -22,7 +22,7 @@ type RequestVoteReply struct {
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
 	rf.mu.Lock()
-	DPrintf(LOG_TRACE, "Raft[%d] has locked its mutex in RequestVote.\n", rf.me)
+	DPrintf(LOG_DEBUG, "Raft[%d] has locked its mutex in RequestVote.\n", rf.me)
 	defer rf.mu.Unlock()
 
 	reply.Term = rf.currentTerm
@@ -31,8 +31,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	DPrintf(LOG_INFO, "Raft[%d] Handle RequestVote, CandidatesId[%d] Term[%d] CurrentTerm[%d] LastLogIndex[%d] LastLogTerm[%d] votedFor[%d]\n",
 			rf.me, args.CandidateId, args.Term, rf.currentTerm, args.LastLogIndex, args.LastLogTerm, rf.votedFor)
 	defer func() {
-		DPrintf(LOG_INFO, "Raft[%d] Return RequestVote, CandidatesId[%d] Term[%d] currentTerm[%d] VoteGranted[%v]\n",
-			 	rf.me, args.CandidateId, args.Term, rf.currentTerm, reply.VoteGranted)
+		DPrintf(LOG_INFO, "Raft[%d] Return RequestVote, CandidatesId[%d] Term[%d] currentTerm[%d] localLastLogIndex[%d] localLastLogTerm[%d] VoteGranted[%v]\n",
+			 	rf.me, args.CandidateId, args.Term, rf.currentTerm, GetLastLogIndex(rf), GetLastLogTerm(rf), reply.VoteGranted)
 	}()
 
 	if args.Term < rf.currentTerm {
@@ -54,13 +54,19 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	localLastLogIndex := GetLastLogIndex(rf)
 	localLastLogTerm := GetLastLogTerm(rf)
 	
-	if (localLastLogTerm <= args.LastLogTerm) {
-		if (localLastLogIndex <= args.LastLogIndex) {
-			rf.votedFor = args.CandidateId
-			reply.VoteGranted = true
-			rf.lastActivity = time.Now() // is this necessary?
-		}
+	if args.LastLogTerm > localLastLogTerm || (args.LastLogTerm == localLastLogTerm && args.LastLogIndex >= localLastLogIndex) {
+		rf.votedFor = args.CandidateId
+		reply.VoteGranted = true
+		rf.lastActivity = time.Now()
 	}
+
+	// if (localLastLogTerm <= args.LastLogTerm) {
+	// 	if (localLastLogIndex <= args.LastLogIndex) {
+	// 		rf.votedFor = args.CandidateId
+	// 		reply.VoteGranted = true
+	// 		rf.lastActivity = time.Now() // is this necessary?
+	// 	}
+	// }
 
 	return
 	// Your code here (2A, 2B).

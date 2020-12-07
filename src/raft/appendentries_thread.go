@@ -3,6 +3,7 @@ package raft
 import (
 	"time"
 	"sort"
+	"sync"
 )
 
 const HeartBeatTimeout = 50 // Milliseconds
@@ -29,7 +30,8 @@ func (rf *Raft) LeaderTryUpdateCommitIndex() {
 	}
 }
 
-func AppendEntriesProcessor(rf *Raft, peerIndex int) {
+func AppendEntriesProcessor(rf *Raft, peerIndex int, wg *sync.WaitGroup) {
+	defer wg.Done()
 	rf.mu.Lock()
 	if rf.killed() || rf.currentRole != ROLE_LEADER {
 		rf.mu.Unlock()
@@ -53,8 +55,8 @@ func AppendEntriesProcessor(rf *Raft, peerIndex int) {
 	// }
 	appendEntriesArgs.PrevLogTerm = rf.log[appendEntriesArgs.PrevLogIndex].Term
 	appendEntriesArgs.Entries = rf.log[appendEntriesArgs.PrevLogIndex + 1:]
-	DPrintf(LOG_INFO, "Raft[%d], peerIndex[%d], current PrevLogIndex is:[%d], current log is:{%+v}, Entries is:{%+v}",
-					   rf.me, peerIndex, appendEntriesArgs.PrevLogIndex, rf.log, appendEntriesArgs.Entries)
+	DPrintf(LOG_INFO, "Raft[%d], peerIndex[%d], current PrevLogIndex is:[%d], Entries is:{%+v}",
+					   rf.me, peerIndex, appendEntriesArgs.PrevLogIndex, appendEntriesArgs.Entries)
 
 
 	rf.mu.Unlock()
@@ -62,9 +64,9 @@ func AppendEntriesProcessor(rf *Raft, peerIndex int) {
 	reply := &AppendEntriesReply{}
 	ok := rf.sendAppendEntries(peerIndex, appendEntriesArgs, reply)
 	if ok {
-		DPrintf(LOG_DEBUG, "Raft[%d] currentTerm[%d] reply.Term[%d] reply success[%t]",
-						   rf.me, rf.currentTerm, reply.Term, reply.Success)
 		if reply.Term > rf.currentTerm {
+			DPrintf(LOG_INFO, "Raft[%d] will return to follower because currentTerm[%d] replyRaftIndex[%d], reply.Term[%d]",
+						   	   rf.me, rf.currentTerm, peerIndex, reply.Term)
 			rf.ReInitFollower(reply.Term)
 			return
 		}
@@ -73,16 +75,21 @@ func AppendEntriesProcessor(rf *Raft, peerIndex int) {
 			rf.nextIndex[peerIndex] = appendEntriesArgs.PrevLogIndex + len(appendEntriesArgs.Entries) + 1
 			rf.matchIndex[peerIndex] = rf.nextIndex[peerIndex] - 1
 			rf.LeaderTryUpdateCommitIndex()
-			DPrintf(LOG_INFO, "Raft[%d] - AppendEntriesHandler - to peer[%d] success:%t, nextIndex[%d] now is:[%d]\n",
+			DPrintf(LOG_INFO, "Raft[%d] - AppendEntriesHandler - to peer[%d] success:%t, nextIndex to Raft[%d] now is:[%d]\n",
 					rf.me, peerIndex, reply.Success, peerIndex, rf.nextIndex[peerIndex])
 		} else {
 			rf.mu.Lock()
 			defer rf.mu.Unlock()
 			rf.nextIndex[peerIndex]--
-			go AppendEntriesProcessor(rf, peerIndex)
+			DPrintf(LOG_INFO, "Raft[%d] - AppendEntriesHandler - to peer[%d] success:%t, rf.nextIndex dec to:[%d]\n",
+					rf.me, peerIndex, reply.Success, rf.nextIndex[peerIndex])
+			wg.Add(1)
+			go AppendEntriesProcessor(rf, peerIndex, wg)
 		}
 	} else {
-		go AppendEntriesProcessor(rf, peerIndex)
+		DPrintf(LOG_ERR, "Raft[%d] - AppendEntriesProcessor - there is an error in sendAppendEntries to Raft[%d], will return.\n",
+						  rf.me, peerIndex)
+		// go AppendEntriesProcessor(rf, peerIndex)
 		// might need retry or something
 	}
 }
@@ -115,11 +122,14 @@ func AppendEntriesThread(rf *Raft) {
 	
 		rf.condLeader.L.Unlock()
 		
+		var AppendEntriesProcessorWG sync.WaitGroup
 		for i := 0; i < len(rf.peers); i++ {
 			if rf.me == i {
 				continue
 			}
-			go AppendEntriesProcessor(rf, i)
+			AppendEntriesProcessorWG.Add(1)
+			go AppendEntriesProcessor(rf, i, &AppendEntriesProcessorWG)
 		}
+		AppendEntriesProcessorWG.Wait()
 	}
 }

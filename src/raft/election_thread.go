@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const electionTimeoutBase = 100 // Milliseconds
+const electionTimeoutBase = 200 // Milliseconds
 
 func (rf *Raft) CollectVotes(requestVoteResultChan chan *RequestVoteReply) {
 	var me, participantsNum int
@@ -48,7 +48,7 @@ func (rf *Raft) CollectVotes(requestVoteResultChan chan *RequestVoteReply) {
 				return
 			}
 		} else {
-			DPrintf(LOG_DEBUG, "Raft[%d] - CollectVotes - there is an error in return value of the sendRequestVote.\n", me)
+			DPrintf(LOG_ERR, "Raft[%d] - CollectVotes - there is an error in return value of the sendRequestVote.\n", me)
 		}
 	}
 	DPrintf(LOG_DEBUG, "Raft[%d] - CollectVotes - obtained [%d] votes and did not become leader, will go back to follower", me, votesObtained)
@@ -65,19 +65,24 @@ func ElectionThread(rf *Raft) {
 		rf.mu.Lock()
 
 		elapse := time.Now().Sub(rf.lastActivity)
-		electionTimeout := time.Duration(electionTimeoutBase + rand.Intn(200)) * time.Millisecond
-
+		electionTimeout := time.Duration(electionTimeoutBase + rand.Intn(150)) * time.Millisecond
+		DPrintf(LOG_INFO, "Raft[%d] - ElectionThread - elapse[%d] electionTimeout[%d]",
+						   rf.me, elapse.Milliseconds(), electionTimeout.Milliseconds())
 		if elapse < electionTimeout {
 			rf.mu.Unlock()
 			continue
 		}
 
-		if (rf.votedFor != -1) {
+		// if (rf.votedFor != -1) {
+		// 	rf.mu.Unlock()
+		// 	DPrintf(LOG_DEBUG, "Raft[%d] - ElectionThread - has voted to Raft[%d], will give up this round", rf.me, rf.votedFor)
+		// 	continue
+		// }
+		if (rf.currentRole != ROLE_FOLLOWER) {
 			rf.mu.Unlock()
-			DPrintf(LOG_DEBUG, "Raft[%d] - ElectionThread - has voted to Raft[%d], will give up this round", rf.me, rf.votedFor)
 			continue
 		}
-
+		
 		rf.BecomeCandidate()
 
 		localLastLogIndex := GetLastLogIndex(rf)
@@ -101,8 +106,10 @@ func ElectionThread(rf *Raft) {
 			}
 			go func(peerIndex int) {
 				reply := &RequestVoteReply{}
+				DPrintf(LOG_DEBUG, "Raft[%d] - ElectionThread - will send Vote Request to [%d]",
+									rf.me, peerIndex)
 				ok := rf.sendRequestVote(peerIndex, requestVoteArgs, reply)
-				DPrintf(LOG_DEBUG, "Raft[%d] - ElectionThread - sendRequestVote to [%d] has returned [%t], with reply: %p",
+				DPrintf(LOG_DEBUG, "Raft[%d] - ElectionThread - sendRequestVote to [%d] has returned ok: [%t], with reply: {%+v}",
 									rf.me, peerIndex, ok, reply)
 				if ok {
 					requestVoteResultChan<- reply

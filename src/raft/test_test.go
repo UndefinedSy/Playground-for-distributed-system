@@ -60,17 +60,17 @@ func TestReElection2A(t *testing.T) {
 	leader1 := cfg.checkOneLeader()
 
 	// if the leader disconnects, a new one should be elected.
-	fmt.Printf("---------- test_test: will disconnect leader[%d] ----------\n", leader1)
+	DPrintf(LOG_INFO, "---------- test_test: will disconnect leader[%d] ----------\n", leader1)
 	cfg.disconnect(leader1)
 	cfg.checkOneLeader()
 
-	fmt.Printf("---------- test_test: disconnected node[%d] rejoin ----------\n", leader1)
+	DPrintf(LOG_INFO, "---------- test_test: disconnected node[%d] rejoin ----------\n", leader1)
 	// if the old leader rejoins, that shouldn't
 	// disturb the new leader.
 	cfg.connect(leader1)
 	leader2 := cfg.checkOneLeader()
 
-	fmt.Printf("---------- test_test: lost quorum[%d, %d] ----------\n", leader2, (leader2 + 1) % servers)
+	DPrintf(LOG_INFO, "---------- test_test: lost quorum[%d, %d] ----------\n", leader2, (leader2 + 1) % servers)
 	// if there's no quorum, no leader should
 	// be elected.
 	cfg.disconnect(leader2)
@@ -78,12 +78,12 @@ func TestReElection2A(t *testing.T) {
 	time.Sleep(2 * RaftElectionTimeout)
 	cfg.checkNoLeader()
 
-	fmt.Printf("---------- test_test: regain quorum[%d] ----------\n", (leader2 + 1) % servers)
+	DPrintf(LOG_INFO, "---------- test_test: regain quorum[%d] ----------\n", (leader2 + 1) % servers)
 	// if a quorum arises, it should elect a leader.
 	cfg.connect((leader2 + 1) % servers)
 	cfg.checkOneLeader()
 
-	fmt.Printf("---------- test_test: rejoin all nodes[%d] ----------\n", leader2)
+	DPrintf(LOG_INFO, "---------- test_test: rejoin all nodes[%d] ----------\n", leader2)
 	// re-join of last node shouldn't prevent leader from existing.
 	cfg.connect(leader2)
 	cfg.checkOneLeader()
@@ -160,7 +160,9 @@ func TestFailAgree2B(t *testing.T) {
 
 	// disconnect one follower from the network.
 	leader := cfg.checkOneLeader()
+	DPrintf(LOG_INFO, "TestFailAgree2B - checkOneLeader - currentLeader is: [%d]", leader)
 	cfg.disconnect((leader + 1) % servers)
+	DPrintf(LOG_INFO, "TestFailAgree2B - disconnect a follower node[%d]", (leader + 1) % servers)
 
 	// the leader and remaining follower should be
 	// able to agree despite the disconnected follower.
@@ -172,6 +174,7 @@ func TestFailAgree2B(t *testing.T) {
 
 	// re-connect
 	cfg.connect((leader + 1) % servers)
+	DPrintf(LOG_INFO, "TestFailAgree2B - reconnect the down node[%d]", (leader + 1) % servers)
 
 	// the full set of servers should preserve
 	// previous agreements, and be able to agree
@@ -347,6 +350,7 @@ func TestRejoin2B(t *testing.T) {
 	// leader network failure
 	leader1 := cfg.checkOneLeader()
 	cfg.disconnect(leader1)
+	DPrintf(LOG_INFO, "TestRejoin2B - disconnect Raft[%d] and send requests to the disconnected node.", leader1)
 
 	// make old leader try to agree on some entries
 	cfg.rafts[leader1].Start(102)
@@ -355,18 +359,22 @@ func TestRejoin2B(t *testing.T) {
 
 	// new leader commits, also for index=2
 	cfg.one(103, 2, true)
+	DPrintf(LOG_INFO, "TestRejoin2B - new leader commits new request 103 with index = 2")
 
 	// new leader network failure
 	leader2 := cfg.checkOneLeader()
 	cfg.disconnect(leader2)
+	DPrintf(LOG_INFO, "TestRejoin2B - leader 2 Raft[%d] has been connected", leader2)
 
 	// old leader connected again
 	cfg.connect(leader1)
+	DPrintf(LOG_INFO, "TestRejoin2B - Previous disconnected leader 1 Raft[%d] has been re-connected", leader1)
 
 	cfg.one(104, 2, true)
 
 	// all together now
 	cfg.connect(leader2)
+	DPrintf(LOG_INFO, "TestRejoin2B - Previous disconnected leader 2 Raft[%d] has been re-connected", leader2)
 
 	cfg.one(105, servers, true)
 
@@ -384,29 +392,40 @@ func TestBackup2B(t *testing.T) {
 
 	// put leader and one follower in a partition
 	leader1 := cfg.checkOneLeader()
+	DPrintf(LOG_INFO, "TestBackup2B - leader 1 Raft[%d] has been selected and checked", leader1)
 	cfg.disconnect((leader1 + 2) % servers)
 	cfg.disconnect((leader1 + 3) % servers)
 	cfg.disconnect((leader1 + 4) % servers)
+	DPrintf(LOG_INFO, "TestBackup2B - 3 nodes[%d, %d, %d] offline, lost quorum",
+					   (leader1 + 2) % servers, (leader1 + 3) % servers, (leader1 + 4) % servers)
 
 	// submit lots of commands that won't commit
 	for i := 0; i < 50; i++ {
 		cfg.rafts[leader1].Start(rand.Int())
 	}
 
+	DPrintf(LOG_INFO, "TestBackup2B - submit 50 commands to leader 1 Raft[%d] but these commands won't commit",
+					   leader1)
+
 	time.Sleep(RaftElectionTimeout / 2)
 
 	cfg.disconnect((leader1 + 0) % servers)
 	cfg.disconnect((leader1 + 1) % servers)
+	DPrintf(LOG_INFO, "TestBackup2B - the remaining 2 nodes[%d, %d] offline",
+					   (leader1 + 0) % servers, (leader1 + 1) % servers)
 
 	// allow other partition to recover
 	cfg.connect((leader1 + 2) % servers)
 	cfg.connect((leader1 + 3) % servers)
 	cfg.connect((leader1 + 4) % servers)
+	DPrintf(LOG_INFO, "TestBackup2B - previous offlined 3 nodes[%d, %d, %d] go live, regain quorum",
+					   (leader1 + 2) % servers, (leader1 + 3) % servers, (leader1 + 4) % servers)
 
 	// lots of successful commands to new group.
 	for i := 0; i < 50; i++ {
 		cfg.one(rand.Int(), 3, true)
 	}
+	DPrintf(LOG_INFO, "TestBackup2B - submit 50 commands to new quorum group, and these commands will commit")
 
 	// now another partitioned leader and one follower
 	leader2 := cfg.checkOneLeader()
@@ -415,11 +434,14 @@ func TestBackup2B(t *testing.T) {
 		other = (leader2 + 1) % servers
 	}
 	cfg.disconnect(other)
+	DPrintf(LOG_INFO, "TestBackup2B - leader 2 Raft[%d] has been checked and another node Raft[%d] goes down",
+					   leader2, other)
 
 	// lots more commands that won't commit
 	for i := 0; i < 50; i++ {
 		cfg.rafts[leader2].Start(rand.Int())
 	}
+	DPrintf(LOG_INFO, "TestBackup2B - submit 50 commands to leader 2 Raft[%d] and these commands won't commit", leader2)
 
 	time.Sleep(RaftElectionTimeout / 2)
 
@@ -430,16 +452,19 @@ func TestBackup2B(t *testing.T) {
 	cfg.connect((leader1 + 0) % servers)
 	cfg.connect((leader1 + 1) % servers)
 	cfg.connect(other)
+	DPrintf(LOG_INFO, "TestBackup2B - bring original leader back to life, current alive nodes[%d, %d, %d]",
+					   (leader1 + 0) % servers, (leader1 + 1) % servers, other)
 
 	// lots of successful commands to new group.
 	for i := 0; i < 50; i++ {
 		cfg.one(rand.Int(), 3, true)
 	}
-
+	
 	// now everyone
 	for i := 0; i < servers; i++ {
 		cfg.connect(i)
 	}
+	DPrintf(LOG_INFO, "TestBackup2B - now everyone goes live")
 	cfg.one(rand.Int(), servers, true)
 
 	cfg.end()
