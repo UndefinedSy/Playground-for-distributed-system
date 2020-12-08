@@ -42,7 +42,10 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	}
 
 	if args.Term > rf.currentTerm {
+		DPrintf(LOG_INFO, "Raft[%d] - RequestVote - The Term in Vote Request[%d] from Raft[%d] is higher than currentTerm[%d]",
+						   rf.me, args.Term, args.CandidateId, rf.currentTerm)
 		rf.ReInitFollower(args.Term)
+		reply.Term = rf.currentTerm
 	}
 
 	if rf.votedFor != -1 && rf.votedFor != args.CandidateId {

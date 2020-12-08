@@ -9,6 +9,7 @@ import (
 const HeartBeatTimeout = 50 // Milliseconds
 
 func (rf *Raft) LeaderTryUpdateCommitIndex() {
+	DPrintf(LOG_DEBUG, "Raft[%d] - LeaderTryUpdateCommitIndex - will try to lock its mutex.", rf.me)
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
@@ -30,39 +31,41 @@ func (rf *Raft) LeaderTryUpdateCommitIndex() {
 	}
 }
 
+func (rf *Raft) GenerateAppendEntriesArgs(targetIndex int, args *AppendEntriesArgs) {
+	args.Term 			= rf.currentTerm
+	args.LeaderId		= rf.me
+	args.PrevLogIndex	= rf.nextIndex[targetIndex] - 1
+	args.PrevLogTerm 	= rf.log[args.PrevLogIndex].Term
+	args.Entries 		= rf.log[args.PrevLogIndex + 1:]
+	
+	args.LeaderCommit	= rf.commitIndex
+	
+	DPrintf(LOG_INFO, "Raft[%d], peerIndex[%d], current PrevLogIndex is:[%d], Entries is:{%+v}",
+					   rf.me, targetIndex, args.PrevLogIndex, args.Entries)
+
+}
+
 func AppendEntriesProcessor(rf *Raft, peerIndex int, wg *sync.WaitGroup) {
 	defer wg.Done()
+	
+	DPrintf(LOG_DEBUG, "Raft[%d] - AppendEntriesProcessor - will try to lock its mutex.", rf.me)
 	rf.mu.Lock()
 	if rf.killed() || rf.currentRole != ROLE_LEADER {
 		rf.mu.Unlock()
 		return
 	}
-	appendEntriesArgs := &AppendEntriesArgs {
-		Term: 			rf.currentTerm,
-		LeaderId:		rf.me,
-		
-		PrevLogIndex:	rf.nextIndex[peerIndex] - 1,
-		
-		LeaderCommit:	rf.commitIndex,
-	}
+	// Check if still need to process AppendEntries
 
-	// if appendEntriesArgs.PrevLogIndex == 0 {
-	// 	appendEntriesArgs.PrevLogTerm = 0
-	// 	appendEntriesArgs.Entries = rf.log[0:]
-	// } else {
-	// 	appendEntriesArgs.PrevLogTerm = rf.log[appendEntriesArgs.PrevLogIndex - 1].Term
-	// 	appendEntriesArgs.Entries = rf.log[(appendEntriesArgs.PrevLogIndex - 1):]
-	// }
-	appendEntriesArgs.PrevLogTerm = rf.log[appendEntriesArgs.PrevLogIndex].Term
-	appendEntriesArgs.Entries = rf.log[appendEntriesArgs.PrevLogIndex + 1:]
-	DPrintf(LOG_INFO, "Raft[%d], peerIndex[%d], current PrevLogIndex is:[%d], Entries is:{%+v}",
-					   rf.me, peerIndex, appendEntriesArgs.PrevLogIndex, appendEntriesArgs.Entries)
-
+	appendEntriesArgs := &AppendEntriesArgs{}
+	rf.GenerateAppendEntriesArgs(peerIndex, appendEntriesArgs)
 
 	rf.mu.Unlock()
 
 	reply := &AppendEntriesReply{}
+
 	ok := rf.sendAppendEntries(peerIndex, appendEntriesArgs, reply)
+	DPrintf(LOG_DEBUG, "Raft[%d] - AppendEntriesProcessor - sendAppendEntries to [%d] has returned ok: [%t], with reply: {%+v}",
+									rf.me, peerIndex, ok, reply)
 	if ok {
 		if reply.Term > rf.currentTerm {
 			DPrintf(LOG_INFO, "Raft[%d] will return to follower because currentTerm[%d] replyRaftIndex[%d], reply.Term[%d]",
@@ -78,6 +81,7 @@ func AppendEntriesProcessor(rf *Raft, peerIndex int, wg *sync.WaitGroup) {
 			DPrintf(LOG_INFO, "Raft[%d] - AppendEntriesHandler - to peer[%d] success:%t, nextIndex to Raft[%d] now is:[%d]\n",
 					rf.me, peerIndex, reply.Success, peerIndex, rf.nextIndex[peerIndex])
 		} else {
+			DPrintf(LOG_DEBUG, "Raft[%d] - AppendEntriesProcessor Success - will try to lock its mutex.", rf.me)
 			rf.mu.Lock()
 			defer rf.mu.Unlock()
 			rf.nextIndex[peerIndex]--
@@ -97,21 +101,14 @@ func AppendEntriesProcessor(rf *Raft, peerIndex int, wg *sync.WaitGroup) {
 func AppendEntriesThread(rf *Raft) {
 	for !rf.killed() {
 		time.Sleep(10 * time.Millisecond)	// here may need a condition_variable.wait_for
+
 		rf.condLeader.L.Lock()
         for rf.currentRole != ROLE_LEADER {
 			rf.condLeader.Wait()
 		}
-		
-		// rf.mu.Lock() // is this still necessary
 
-		// if rf.currentRole != ROLE_LEADER { 	// here should be a condition variable
-		// 	// rf.mu.Unlock()
-		// 	rf.condLeader.L.Unlock()
-		// 	continue
-		// }
 
 		if time.Now().Sub(rf.lastHeartbeat) < (HeartBeatTimeout * time.Millisecond) {
-			// rf.mu.Unlock()
 			rf.condLeader.L.Unlock()
 			continue
 		}
@@ -122,14 +119,15 @@ func AppendEntriesThread(rf *Raft) {
 	
 		rf.condLeader.L.Unlock()
 		
-		var AppendEntriesProcessorWG sync.WaitGroup
+		// var AppendEntriesProcessorWG sync.WaitGroup
 		for i := 0; i < len(rf.peers); i++ {
 			if rf.me == i {
 				continue
 			}
-			AppendEntriesProcessorWG.Add(1)
-			go AppendEntriesProcessor(rf, i, &AppendEntriesProcessorWG)
+
+			// AppendEntriesProcessorWG.Add(1)
+			go AppendEntriesProcessor(rf, i) // , &AppendEntriesProcessorWG)
 		}
-		AppendEntriesProcessorWG.Wait()
+		// AppendEntriesProcessorWG.Wait()
 	}
 }

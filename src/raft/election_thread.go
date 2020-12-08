@@ -62,29 +62,23 @@ func ElectionThread(rf *Raft) {
 	for !rf.killed() {
 		time.Sleep(electionTimeoutBase * time.Millisecond)
 		
+		DPrintf(LOG_DEBUG, "Raft[%d] - ElectionThread - will try to lock its mutex.", rf.me)
 		rf.mu.Lock()
 
 		elapse := time.Now().Sub(rf.lastActivity)
 		electionTimeout := time.Duration(electionTimeoutBase + rand.Intn(150)) * time.Millisecond
-		DPrintf(LOG_INFO, "Raft[%d] - ElectionThread - elapse[%d] electionTimeout[%d]",
-						   rf.me, elapse.Milliseconds(), electionTimeout.Milliseconds())
 		if elapse < electionTimeout {
 			rf.mu.Unlock()
 			continue
 		}
 
-		// if (rf.votedFor != -1) {
-		// 	rf.mu.Unlock()
-		// 	DPrintf(LOG_DEBUG, "Raft[%d] - ElectionThread - has voted to Raft[%d], will give up this round", rf.me, rf.votedFor)
-		// 	continue
-		// }
 		if (rf.currentRole != ROLE_FOLLOWER) {
 			rf.mu.Unlock()
 			continue
 		}
-		
 		rf.BecomeCandidate()
 
+		// Prepare RequestVoteArgs
 		localLastLogIndex := GetLastLogIndex(rf)
 		localLastLogTerm := GetLastLogTerm(rf)
 		
@@ -94,7 +88,8 @@ func ElectionThread(rf *Raft) {
 			LastLogIndex: 	localLastLogIndex,
 			LastLogTerm:	localLastLogTerm,
 		}
-
+		// Prepare RequestVoteArgs
+		
 		peersNum := len(rf.peers)
 
 		rf.mu.Unlock()
@@ -104,6 +99,7 @@ func ElectionThread(rf *Raft) {
 			if rf.me == i {
 				continue
 			}
+			
 			go func(peerIndex int) {
 				reply := &RequestVoteReply{}
 				DPrintf(LOG_DEBUG, "Raft[%d] - ElectionThread - will send Vote Request to [%d]",

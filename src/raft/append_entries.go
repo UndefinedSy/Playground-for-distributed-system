@@ -20,6 +20,7 @@ type AppendEntriesReply struct {
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	DPrintf(LOG_DEBUG, "Raft[%d] - AppendEntries - will try to lock its mutex.", rf.me)
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	DPrintf(LOG_INFO, "Raft[%d] Handle AppendEntries, LeaderId[%d] Term[%d] CurrentTerm[%d] currentRole[%d] currentLeader[%d] currentLog{%+v} PrevLogIndex[%d], PrevLogTerm[%d] leaderCommit[%d], EntriesLength[%d]\n",
@@ -86,6 +87,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	DPrintf(LOG_DEBUG, "Raft[%d] - sendAppendEntries - will send AppendEntries Request to [%d]",
+									rf.me, server)
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	return ok
 }

@@ -54,6 +54,7 @@ type Entry struct {
 	Command	interface{}
 }
 
+// for debug trace
 func (entry *Entry) String() string {
 	return fmt.Sprintf("{Term[%d], Index[%d], Command[%v]}", entry.Term, entry.Index, entry.Command)
 }
@@ -122,7 +123,6 @@ func (rf *Raft) BecomeLeader() {
 
 	DPrintf(LOG_INFO, "Raft[%d] became Leader term[%d]",
 			 		   rf.me, rf.currentTerm)
-	// need to boardcast empty AppendEntry()
 }
 
 func (rf *Raft) ReInitFollower(term int) {
@@ -304,6 +304,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.applyCh = applyCh
 
 	rand.Seed(int64(me))
+	
 	go ElectionThread(rf)
 	go AppendEntriesThread(rf)
 
