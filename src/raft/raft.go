@@ -25,6 +25,8 @@ import (
 
 	"../labrpc"
 	"fmt"
+
+	"../slog"
 )
 // import "bytes"
 // import "../labgob"
@@ -121,16 +123,16 @@ func (rf *Raft) BecomeLeader() {
 		rf.nextIndex[i] = GetLastLogIndex(rf) + 1
 	}
 
-	DPrintf(LOG_INFO, "Raft[%d] became Leader term[%d]",
-			 		   rf.me, rf.currentTerm)
+	slog.Log(slog.LOG_INFO, "Raft[%d] became Leader term[%d]",
+			 		   		rf.me, rf.currentTerm)
 }
 
 func (rf *Raft) ReInitFollower(term int) {
 	rf.currentTerm  = term
 	rf.currentRole  = ROLE_FOLLOWER
 	rf.votedFor 	= -1
-	DPrintf(LOG_DEBUG, "Raft[%d] became Follower term[%d]\n",
-				 		rf.me, rf.currentTerm)
+	slog.Log(slog.LOG_DEBUG, "Raft[%d] became Follower term[%d]",
+				 			  rf.me, rf.currentTerm)
 }
 
 func (rf *Raft) BecomeCandidate() {
@@ -138,8 +140,8 @@ func (rf *Raft) BecomeCandidate() {
 	rf.currentRole  = ROLE_CANDIDATE
 	rf.votedFor 	= rf.me
 	rf.lastActivity = time.Now()
-	DPrintf(LOG_DEBUG, "Raft[%d] became Candidate term[%d], votedFor[%d] lastActivity[%s]\n",
-						rf.me, rf.currentTerm, rf.votedFor, rf.lastActivity.Format(time.RFC3339))
+	slog.Log(slog.LOG_DEBUG, "Raft[%d] became Candidate term[%d], votedFor[%d]",
+						  	  rf.me, rf.currentTerm, rf.votedFor)
 }
 
 // return currentTerm and whether this server
@@ -156,8 +158,8 @@ func (rf *Raft) GetState() (int, bool) {
 	if rf.currentRole == ROLE_LEADER {
 		isleader = true
 	}
-	DPrintf(LOG_INFO, "GetState of Raft[%d]: term[%d], isLeader[%t]",
-					   rf.me, rf.currentTerm, isleader)
+	slog.Log(slog.LOG_INFO, "GetState of Raft[%d]: term[%d], isLeader[%t]",
+					   		 rf.me, rf.currentTerm, isleader)
 
 	// Your code here (2A).
 	return term, isleader
@@ -236,8 +238,8 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 			Command: command,
 		}
 		rf.log = append(rf.log, newEntry)
-		DPrintf(LOG_INFO, "Raft[%d] will append new entry{Index: [%d], Term: [%d], Command:[%T | %v]\n",
-						   rf.me, index, term, command, command)
+		slog.Log(slog.LOG_DEBUG, "Raft[%d] will append new entry{Index: [%d], Term: [%d], Command:[%T | %v]",
+						   		 rf.me, index, term, command, command)
 	}
 	// Your code here (2B).
 
@@ -256,7 +258,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 // should call killed() to check whether it should stop.
 //
 func (rf *Raft) Kill() {
-	DPrintf(LOG_INFO, "Raft[%d] has been killed", rf.me)
+	slog.Log(slog.LOG_INFO, "Raft[%d] has been killed", rf.me)
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
 }

@@ -3,55 +3,54 @@ package raft
 import (
 	"math/rand"
 	"time"
+
+	"../slog"
 )
 
 const electionTimeoutBase = 200 // Milliseconds
 
 func (rf *Raft) CollectVotes(requestVoteResultChan chan *RequestVoteReply) {
-	var me, participantsNum int
-	{
-		rf.mu.Lock()
-		// defer rf.mu.Unlock()
-		me = rf.me
-		participantsNum = len(rf.peers)
-		rf.mu.Unlock()
-	}
-
 	votesObtained := 1
 
-	for i := 0; i < participantsNum - 1; i++ {
+	participantsNum := cap(requestVoteResultChan)
+	for i := 0; i < participantsNum; i++ {
 		requestVoteResult := <-requestVoteResultChan
+
 		if requestVoteResult != nil {
 			if requestVoteResult.VoteGranted {
 				votesObtained++
-				DPrintf(LOG_DEBUG, "Raft[%d] - CollectVotes - has got 1 vote. Currently have [%d] votes.\n", me, votesObtained)
+				slog.Log(slog.LOG_DEBUG, "Raft[%d] got 1 vote. Currently have [%d] votes.", rf.me, votesObtained)
+
 				if votesObtained > (participantsNum / 2) {
-					rf.mu.Lock()
-					defer rf.mu.Unlock()
-					DPrintf(LOG_INFO, "Raft[%d] - CollectVotes - has got majority[%d] votes, will become a leader | currentRole is: [%d].\n",
-							me, votesObtained, rf.currentRole)
+					slog.Log(slog.LOG_INFO, "Raft[%d] has got majority[%d] votes, will become a leader | currentRole is: [%d].",
+											 rf.me, votesObtained, rf.currentRole)
 					if (rf.currentRole == ROLE_CANDIDATE) {
+						rf.mu.Lock()
+
 						rf.BecomeLeader()
-						// rf.lastHeartbeat = time.Unix(0, 0)
-						rf.condLeader.Signal()
+						rf.condLeader.Signal()	// kick off AppendEntriesThread
+
+						rf.mu.Unlock()
 					}
 					return
 				}
 			}
 
 			if requestVoteResult.Term > rf.currentTerm {
-				DPrintf(LOG_INFO, "Raft[%d] - CollectVotes - has met a peer with higher Term[%d], will return to a follower.\n", me, requestVoteResult.Term)
 				rf.mu.Lock()
-				defer rf.mu.Unlock()
+
+				slog.Log(slog.LOG_INFO, "Raft[%d] has met a peer with higher Term[%d], will return to a follower.", rf.me, requestVoteResult.Term)
 				rf.ReInitFollower(requestVoteResult.Term)
+
+				rf.mu.Unlock()
 				// give up requesting vote.
 				return
 			}
 		} else {
-			DPrintf(LOG_ERR, "Raft[%d] - CollectVotes - there is an error in return value of the sendRequestVote.\n", me)
+			slog.Log(slog.LOG_ERR, "Raft[%d] there is an error in Call sendRequestVote.", rf.me)
 		}
 	}
-	DPrintf(LOG_DEBUG, "Raft[%d] - CollectVotes - obtained [%d] votes and did not become leader, will go back to follower", me, votesObtained)
+	slog.Log(slog.LOG_DEBUG, "Raft[%d] obtained [%d] votes and did not become leader, will go back to follower", rf.me, votesObtained)
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	rf.ReInitFollower(rf.currentTerm)
@@ -60,13 +59,14 @@ func (rf *Raft) CollectVotes(requestVoteResultChan chan *RequestVoteReply) {
 
 func ElectionThread(rf *Raft) {
 	for !rf.killed() {
-		time.Sleep(electionTimeoutBase * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 		
-		DPrintf(LOG_DEBUG, "Raft[%d] - ElectionThread - will try to lock its mutex.", rf.me)
+		slog.Log(slog.LOG_DEBUG, "Raft[%d] will try to lock its mutex.", rf.me)
 		rf.mu.Lock()
 
 		elapse := time.Now().Sub(rf.lastActivity)
 		electionTimeout := time.Duration(electionTimeoutBase + rand.Intn(150)) * time.Millisecond
+		slog.Log(slog.LOG_DEBUG, "Raft[%d] elapse: [%d] electionTimeout: [%d]", rf.me, elapse.Milliseconds(), electionTimeout.Milliseconds())
 		if elapse < electionTimeout {
 			rf.mu.Unlock()
 			continue
@@ -79,16 +79,12 @@ func ElectionThread(rf *Raft) {
 		rf.BecomeCandidate()
 
 		// Prepare RequestVoteArgs
-		localLastLogIndex := GetLastLogIndex(rf)
-		localLastLogTerm := GetLastLogTerm(rf)
-		
 		requestVoteArgs := &RequestVoteArgs {
 			Term: 			rf.currentTerm,
 			CandidateId: 	rf.me,
-			LastLogIndex: 	localLastLogIndex,
-			LastLogTerm:	localLastLogTerm,
+			LastLogIndex: 	GetLastLogIndex(rf),
+			LastLogTerm:	GetLastLogTerm(rf),
 		}
-		// Prepare RequestVoteArgs
 		
 		peersNum := len(rf.peers)
 
@@ -102,11 +98,7 @@ func ElectionThread(rf *Raft) {
 			
 			go func(peerIndex int) {
 				reply := &RequestVoteReply{}
-				DPrintf(LOG_DEBUG, "Raft[%d] - ElectionThread - will send Vote Request to [%d]",
-									rf.me, peerIndex)
 				ok := rf.sendRequestVote(peerIndex, requestVoteArgs, reply)
-				DPrintf(LOG_DEBUG, "Raft[%d] - ElectionThread - sendRequestVote to [%d] has returned ok: [%t], with reply: {%+v}",
-									rf.me, peerIndex, ok, reply)
 				if ok {
 					requestVoteResultChan<- reply
 				} else {
@@ -117,6 +109,5 @@ func ElectionThread(rf *Raft) {
 		}
 		
 		rf.CollectVotes(requestVoteResultChan)
-
 	}
 }

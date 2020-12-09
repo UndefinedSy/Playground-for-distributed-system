@@ -1,6 +1,9 @@
 package raft
 
-import "time"
+import (
+	"time"
+	"../slog"
+)
 
 type RequestVoteArgs struct {
 	Term			int
@@ -21,57 +24,51 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+	slog.Log(slog.LOG_DEBUG, "Raft[%d] will try to lock its mutex.", rf.me)
 	rf.mu.Lock()
-	DPrintf(LOG_DEBUG, "Raft[%d] has locked its mutex in RequestVote.\n", rf.me)
 	defer rf.mu.Unlock()
 
+	slog.Log(slog.LOG_INFO, `Raft[%d] Handle RequestVote, currentVotedFor[%d], CurrentTerm[%d]; args: CandidatesId[%d] Term[%d] LastLogIndex[%d] LastLogTerm[%d]`,
+							rf.me, rf.votedFor, rf.currentTerm, 
+							args.CandidateId, args.Term, args.LastLogIndex, args.LastLogTerm)
+	defer func() {
+		slog.Log(slog.LOG_INFO, "Raft[%d] Return RequestVote, CandidatesId[%d] Term[%d] currentTerm[%d] localLastLogIndex[%d] localLastLogTerm[%d] VoteGranted[%v]",
+			 				     rf.me, args.CandidateId, args.Term, rf.currentTerm, GetLastLogIndex(rf), GetLastLogTerm(rf), reply.VoteGranted)
+	}()
+
+	// init reply
 	reply.Term = rf.currentTerm
 	reply.VoteGranted = false
 
-	DPrintf(LOG_INFO, "Raft[%d] Handle RequestVote, CandidatesId[%d] Term[%d] CurrentTerm[%d] LastLogIndex[%d] LastLogTerm[%d] votedFor[%d]\n",
-			rf.me, args.CandidateId, args.Term, rf.currentTerm, args.LastLogIndex, args.LastLogTerm, rf.votedFor)
-	defer func() {
-		DPrintf(LOG_INFO, "Raft[%d] Return RequestVote, CandidatesId[%d] Term[%d] currentTerm[%d] localLastLogIndex[%d] localLastLogTerm[%d] VoteGranted[%v]\n",
-			 	rf.me, args.CandidateId, args.Term, rf.currentTerm, GetLastLogIndex(rf), GetLastLogTerm(rf), reply.VoteGranted)
-	}()
-
 	if args.Term < rf.currentTerm {
-		DPrintf(LOG_DEBUG, "requester(%d)'s Term[%d] < local(%d) term[%d]\n",
-					 		args.CandidateId, args.Term, rf.me, rf.currentTerm)
+		slog.Log(slog.LOG_INFO, "requester[%d]'s Term[%d] < local[%d] term[%d]",
+					 			 args.CandidateId, args.Term, rf.me, rf.currentTerm)
 		return
 	}
 
 	if args.Term > rf.currentTerm {
-		DPrintf(LOG_INFO, "Raft[%d] - RequestVote - The Term in Vote Request[%d] from Raft[%d] is higher than currentTerm[%d]",
-						   rf.me, args.Term, args.CandidateId, rf.currentTerm)
+		slog.Log(slog.LOG_INFO, "Raft[%d] goes to Follower because Term in Vote Request[%d] from Raft[%d] is higher than currentTerm[%d]",
+						   		 rf.me, args.Term, args.CandidateId, rf.currentTerm)
 		rf.ReInitFollower(args.Term)
 		reply.Term = rf.currentTerm
 	}
 
 	if rf.votedFor != -1 && rf.votedFor != args.CandidateId {
-		DPrintf(LOG_DEBUG, "Raft[%d] has already voted other candidate(%d)\n",
-					 		rf.me, rf.votedFor)
+		slog.Log(slog.LOG_DEBUG, "Raft[%d] has already voted to candidate(%d)",
+					 			  rf.me, rf.votedFor)
 		return
 	}
 
 	localLastLogIndex := GetLastLogIndex(rf)
 	localLastLogTerm := GetLastLogTerm(rf)
-	
 	if args.LastLogTerm > localLastLogTerm || (args.LastLogTerm == localLastLogTerm && args.LastLogIndex >= localLastLogIndex) {
+		slog.Log(slog.LOG_DEBUG, "Raft[%d] will vote candidate(%d)",
+					 			  rf.me, args.CandidateId)
 		rf.votedFor = args.CandidateId
 		reply.VoteGranted = true
 		rf.lastActivity = time.Now()
 	}
 
-	// if (localLastLogTerm <= args.LastLogTerm) {
-	// 	if (localLastLogIndex <= args.LastLogIndex) {
-	// 		rf.votedFor = args.CandidateId
-	// 		reply.VoteGranted = true
-	// 		rf.lastActivity = time.Now() // is this necessary?
-	// 	}
-	// }
-
-	return
 	// Your code here (2A, 2B).
 }
 
@@ -108,6 +105,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 //
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+	slog.Log(slog.LOG_DEBUG, "Raft[%d] has received response from Raft[%d]", rf.me, server)
 	return ok
 }
 
