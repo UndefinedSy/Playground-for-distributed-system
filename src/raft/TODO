@@ -1,0 +1,4 @@
+1. optimization that backs up nextIndex in AppendEntries
+    > The paper is vague about the details; you will need to fill in the gaps, perhaps with the help of the 6.824 Raft lectures.
+2. readPersist in raft.go
+3. persist
