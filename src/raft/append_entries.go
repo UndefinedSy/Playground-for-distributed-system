@@ -17,8 +17,10 @@ type AppendEntriesArgs struct {
 }
 
 type AppendEntriesReply struct {
-	Term		int
-	Success		bool
+	Term			int
+	Success			bool
+	// fast back up when there is a conflict in AppendEntries
+	ConflictIndex	int
 }
 
 func (rf *Raft) FollowerTryUpdateCommitIndex(leaderCommit int) {
@@ -40,6 +42,17 @@ func (rf *Raft) FollowerTryUpdateCommitIndex(leaderCommit int) {
 	}
 }
 
+func (rf *Raft) GetFirstIndexByTerm(targetTerm int) int {
+	var targetIndex int // init?
+	for i := len(rf.log) - 1; i >= 0; i-- {
+		if rf.log[i].Term < targetTerm {
+			targetIndex = i + 1
+			break
+		}
+	}
+	return targetIndex
+}
+
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	slog.Log(slog.LOG_DEBUG, "Raft[%d] will try to lock its mutex.", rf.me)
 	rf.mu.Lock()
@@ -56,6 +69,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// init reply
 	reply.Term = rf.currentTerm
 	reply.Success = false
+	reply.ConflictIndex = -1
 
 	if args.Term < rf.currentTerm {
 		slog.Log(slog.LOG_INFO, "The request from Raft[%d] is stale, will return False.", args.LeaderId)
@@ -69,22 +83,24 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.currentLeader = args.LeaderId
 	rf.lastActivity = time.Now()
 	
+	// for debug, can be deleted
 	if args.PrevLogIndex < 0 {
 		slog.Log(slog.LOG_ERR, "Raft[%d] Index out of range: args.PrevLogIndex[%d] length of rf.log[%d]",
 						  rf.me, args.PrevLogIndex, len(rf.log))
 	}
 
+	// can put together with the next if 
 	if args.PrevLogIndex > GetLastLogIndex(rf) {
 		slog.Log(slog.LOG_INFO, "The args PrevLogIndex[%d] exceed the Raft[%d]'s lastLogIndex[%d], return false to go back.",
 								 args.PrevLogIndex, rf.me, GetLastLogIndex(rf))
-		// TODO: will use a smart way to go back
+		reply.ConflictIndex = GetLastLogIndex(rf)
 		return
 	} 
 	
 	if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
 		slog.Log(slog.LOG_INFO, "The args PrevLogTerm[%d] conlicts with Raft[%d]'s existing one[%d], return false to go back.",
 						  		 args.PrevLogTerm, rf.me, rf.log[args.PrevLogIndex].Term)
-		// 可以返回冲突的 term 及该 term 的第一个 index，使 leader 可以直接回退 nextIndex 到合适位置。（到哪没想好）
+		reply.ConflictIndex = rf.GetFirstIndexByTerm(args.PrevLogTerm)
 		return
 	}
 

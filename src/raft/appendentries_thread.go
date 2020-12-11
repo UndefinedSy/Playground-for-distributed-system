@@ -89,7 +89,7 @@ func AppendEntriesProcessor(rf *Raft, peerIndex int) {
 
 		} else {
 			// may need a smart way
-			rf.nextIndex[peerIndex]--
+			rf.nextIndex[peerIndex] = reply.ConflictIndex - 1
 			slog.Log(slog.LOG_INFO, "Raft[%d] to peer[%d] success:%t, rf.nextIndex dec to:[%d]",
 									 rf.me, peerIndex, reply.Success, rf.nextIndex[peerIndex])
 			rf.mu.Unlock()
