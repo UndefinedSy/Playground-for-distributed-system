@@ -70,8 +70,7 @@ func AppendEntriesProcessor(rf *Raft, peerIndex int) {
 		rf.mu.Lock()
 
 		if reply.Term > rf.currentTerm {
-			slog.Log(slog.LOG_INFO, `Raft[%d] will return to follower because currentTerm[%d] | 
-									 reply from Raft[%d] reply.Term[%d]`,
+			slog.Log(slog.LOG_INFO, `Raft[%d] will return to follower because currentTerm[%d] | reply from Raft[%d] reply.Term[%d]`,
 						   	   		 rf.me, rf.currentTerm, peerIndex, reply.Term)
 			rf.ReInitFollower(reply.Term)
 			rf.mu.Unlock()
@@ -89,7 +88,7 @@ func AppendEntriesProcessor(rf *Raft, peerIndex int) {
 
 		} else {
 			// may need a smart way
-			rf.nextIndex[peerIndex] = reply.ConflictIndex - 1
+			rf.nextIndex[peerIndex] = reply.ConflictIndex
 			slog.Log(slog.LOG_INFO, "Raft[%d] to peer[%d] success:%t, rf.nextIndex dec to:[%d]",
 									 rf.me, peerIndex, reply.Success, rf.nextIndex[peerIndex])
 			rf.mu.Unlock()

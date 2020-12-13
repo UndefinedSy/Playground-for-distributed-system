@@ -16,7 +16,7 @@ const (
 	LOG_DEBUG	LogLevel = 20
 )
 
-const currentLogLevel = LOG_ERR
+const currentLogLevel = LOG_INFO
 
 func Log(logLevel LogLevel, formating string, args ...interface{}) {
 	var logLevelString string

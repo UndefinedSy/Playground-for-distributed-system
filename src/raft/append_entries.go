@@ -98,9 +98,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	} 
 	
 	if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
-		slog.Log(slog.LOG_INFO, "The args PrevLogTerm[%d] conlicts with Raft[%d]'s existing one[%d], return false to go back.",
-						  		 args.PrevLogTerm, rf.me, rf.log[args.PrevLogIndex].Term)
 		reply.ConflictIndex = rf.GetFirstIndexByTerm(args.PrevLogTerm)
+		slog.Log(slog.LOG_INFO, "The args PrevLogTerm[%d] conlicts with Raft[%d]'s existing one[%d], return false and back up to [%d].",
+						  		 args.PrevLogTerm, rf.me, rf.log[args.PrevLogIndex].Term, reply.ConflictIndex)
 		return
 	}
 
