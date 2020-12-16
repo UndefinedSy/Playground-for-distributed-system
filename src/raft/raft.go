@@ -26,10 +26,12 @@ import (
 	"../labrpc"
 	"fmt"
 
+	"bytes"
+	"../labgob"
+
 	"../slog"
 )
-// import "bytes"
-// import "../labgob"
+
 
 
 
@@ -124,7 +126,9 @@ func (rf *Raft) BecomeLeader() {
 	}
 
 	slog.Log(slog.LOG_INFO, "Raft[%d] became Leader term[%d]",
-			 		   		rf.me, rf.currentTerm)
+								rf.me, rf.currentTerm)
+
+	rf.persist()
 }
 
 func (rf *Raft) ReInitFollower(term int) {
@@ -132,7 +136,9 @@ func (rf *Raft) ReInitFollower(term int) {
 	rf.currentRole  = ROLE_FOLLOWER
 	rf.votedFor 	= -1
 	slog.Log(slog.LOG_DEBUG, "Raft[%d] became Follower term[%d]",
-				 			  rf.me, rf.currentTerm)
+							   rf.me, rf.currentTerm)
+
+	rf.persist()
 }
 
 func (rf *Raft) BecomeCandidate() {
@@ -141,7 +147,9 @@ func (rf *Raft) BecomeCandidate() {
 	rf.votedFor 	= rf.me
 	rf.lastActivity = time.Now()
 	slog.Log(slog.LOG_DEBUG, "Raft[%d] became Candidate term[%d], votedFor[%d]",
-						  	  rf.me, rf.currentTerm, rf.votedFor)
+								rf.me, rf.currentTerm, rf.votedFor)
+
+	rf.persist()
 }
 
 // return currentTerm and whether this server
@@ -172,13 +180,16 @@ func (rf *Raft) GetState() (int, bool) {
 //
 func (rf *Raft) persist() {
 	// Your code here (2C).
-	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+
+	bufferToPersist := new(bytes.Buffer)
+	bufferEncoder := labgob.NewEncoder(bufferToPersist)
+	bufferEncoder.Encode(rf.currentTerm)
+	bufferEncoder.Encode(rf.votedFor)
+	bufferEncoder.Encode(rf.log)	// here persist the whole log entries. Maybe should only persist operations incrementally
+	data := bufferToPersist.Bytes()
+	rf.persister.SaveRaftState(data)
+	slog.Log(slog.LOG_INFO, "Raft[%d] will persist its state: {currentTerm[%d], votedFor[%d], log[%+v]}",
+							rf.me, rf.currentTerm, rf.votedFor, rf.log)
 }
 
 
@@ -191,17 +202,14 @@ func (rf *Raft) readPersist(data []byte) {
 	}
 	// Your code here (2C).
 	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
+	bufferRestored := bytes.NewBuffer(data)
+	bufferDecoder := labgob.NewDecoder(bufferRestored)
+
+	bufferDecoder.Decode(&rf.currentTerm)
+	bufferDecoder.Decode(&rf.votedFor)
+	bufferDecoder.Decode(&rf.log)
+	slog.Log(slog.LOG_INFO, "Raft[%d] has read persistent state: {currentTerm[%d], votedFor[%d], log[%+v]}",
+							rf.me, rf.currentTerm, rf.votedFor, rf.log)
 }
 
 //
@@ -239,7 +247,9 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		}
 		rf.log = append(rf.log, newEntry)
 		slog.Log(slog.LOG_DEBUG, "Raft[%d] will append new entry{Index: [%d], Term: [%d], Command:[%T | %v]",
-						   		 rf.me, index, term, command, command)
+									rf.me, index, term, command, command)
+		
+		rf.persist()
 	}
 	// Your code here (2B).
 
@@ -306,13 +316,12 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.applyCh = applyCh
 
 	rand.Seed(int64(me))
-	
-	go ElectionThread(rf)
-	go AppendEntriesThread(rf)
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
+	go ElectionThread(rf)
+	go AppendEntriesThread(rf)
 
 	return rf
 }

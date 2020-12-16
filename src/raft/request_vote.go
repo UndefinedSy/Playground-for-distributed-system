@@ -67,6 +67,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.votedFor = args.CandidateId
 		reply.VoteGranted = true
 		rf.lastActivity = time.Now()
+
+		rf.persist()
 	}
 
 	// Your code here (2A, 2B).

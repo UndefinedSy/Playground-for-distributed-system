@@ -76,7 +76,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		return
 	}
 
-	if (args.Term >= rf.currentTerm) {
+	if args.Term > rf.currentTerm || (args.Term == rf.currentTerm && rf.votedFor != -1) {
 		rf.ReInitFollower(args.Term)
 	}
 
@@ -98,7 +98,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	} 
 	
 	if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
-		reply.ConflictIndex = rf.GetFirstIndexByTerm(args.PrevLogTerm)
+		reply.ConflictIndex = rf.GetFirstIndexByTerm(rf.log[args.PrevLogIndex].Term)
 		slog.Log(slog.LOG_INFO, "The args PrevLogTerm[%d] conlicts with Raft[%d]'s existing one[%d], return false and back up to [%d].",
 						  		 args.PrevLogTerm, rf.me, rf.log[args.PrevLogIndex].Term, reply.ConflictIndex)
 		return
@@ -110,6 +110,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	for _, Entry := range(args.Entries) {
 		rf.log = append(rf.log, Entry)
+	}
+
+	if len(args.Entries) > 0 {
+		rf.persist()
 	}
 
 	rf.FollowerTryUpdateCommitIndex(args.LeaderCommit)
