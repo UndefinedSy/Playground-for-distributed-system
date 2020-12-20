@@ -781,17 +781,17 @@ func TestFigure8Unreliable2C(t *testing.T) {
 		if iters == 200 {
 			cfg.setlongreordering(true)
 		}
-		fmt.Printf("TestFigure8Unreliable2C - LOOP[%d] setlongreordering(true)\n", iters)
+		// fmt.Printf("TestFigure8Unreliable2C - LOOP[%d] setlongreordering(true)\n", iters)
 		leader := -1
 		for i := 0; i < servers; i++ {
 			_, _, ok := cfg.rafts[i].Start(rand.Int() % 10000)
-			fmt.Printf("TestFigure8Unreliable2C - LOOP[%d] Raft[%d] call Start returns ok[%t] connected[%t]\n",
-						iters, i, ok, cfg.connected[i])
+			// fmt.Printf("TestFigure8Unreliable2C - LOOP[%d] Raft[%d] call Start returns ok[%t] connected[%t]\n",
+						// iters, i, ok, cfg.connected[i])
 			if ok && cfg.connected[i] {
 				leader = i
 			}
 		}
-		fmt.Printf("TestFigure8Unreliable2C - LOOP[%d] checkpoint 0\n", iters)
+		// fmt.Printf("TestFigure8Unreliable2C - LOOP[%d] checkpoint 0\n", iters)
 		if (rand.Int() % 1000) < 100 {
 			ms := rand.Int63() % (int64(RaftElectionTimeout/time.Millisecond) / 2)
 			time.Sleep(time.Duration(ms) * time.Millisecond)
@@ -799,10 +799,10 @@ func TestFigure8Unreliable2C(t *testing.T) {
 			ms := (rand.Int63() % 13)
 			time.Sleep(time.Duration(ms) * time.Millisecond)
 		}
-		fmt.Printf("TestFigure8Unreliable2C - LOOP[%d] checkpoint 1\n", iters)
+		// fmt.Printf("TestFigure8Unreliable2C - LOOP[%d] checkpoint 1\n", iters)
 		if leader != -1 && (rand.Int()%1000) < int(RaftElectionTimeout/time.Millisecond)/2 {
 			cfg.disconnect(leader)
-			fmt.Printf("TestFigure8Unreliable2C - LOOP[%d] leader Raft[%d] has been disconnected\n", iters, leader)
+			// fmt.Printf("TestFigure8Unreliable2C - LOOP[%d] leader Raft[%d] has been disconnected\n", iters, leader)
 			nup -= 1
 		}
 
@@ -810,7 +810,7 @@ func TestFigure8Unreliable2C(t *testing.T) {
 			s := rand.Int() % servers
 			if cfg.connected[s] == false {
 				cfg.connect(s)
-				fmt.Printf("TestFigure8Unreliable2C - LOOP[%d] Raft[%d] has been re-connected because nup < 3. \n", iters, s)
+				// fmt.Printf("TestFigure8Unreliable2C - LOOP[%d] Raft[%d] has been re-connected because nup < 3. \n", iters, s)
 				nup += 1
 			}
 		}
