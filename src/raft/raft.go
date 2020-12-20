@@ -185,10 +185,10 @@ func (rf *Raft) persist() {
 	bufferEncoder := labgob.NewEncoder(bufferToPersist)
 	bufferEncoder.Encode(rf.currentTerm)
 	bufferEncoder.Encode(rf.votedFor)
-	bufferEncoder.Encode(rf.log)	// here persist the whole log entries. Maybe should only persist operations incrementally
+	bufferEncoder.Encode(rf.log[:rf.commitIndex+1])	// here persist the whole log entries. Maybe should only persist operations incrementally
 	data := bufferToPersist.Bytes()
 	rf.persister.SaveRaftState(data)
-	slog.Log(slog.LOG_INFO, "Raft[%d] will persist its state: {currentTerm[%d], votedFor[%d], log[%+v]}",
+	slog.Log(slog.LOG_INFO, "Raft[%d] has persisted its state: {currentTerm[%d], votedFor[%d], log[%+v]}",
 							rf.me, rf.currentTerm, rf.votedFor, rf.log)
 }
 
@@ -205,9 +205,22 @@ func (rf *Raft) readPersist(data []byte) {
 	bufferRestored := bytes.NewBuffer(data)
 	bufferDecoder := labgob.NewDecoder(bufferRestored)
 
-	bufferDecoder.Decode(&rf.currentTerm)
-	bufferDecoder.Decode(&rf.votedFor)
-	bufferDecoder.Decode(&rf.log)
+	var currentTerm int
+	var votedFor int
+	var log []*Entry
+
+	if bufferDecoder.Decode(&currentTerm) != nil ||
+		bufferDecoder.Decode(&votedFor) != nil ||
+		bufferDecoder.Decode(&log) != nil {
+			slog.Log(slog.LOG_ERR, "Raft[%d] readPersist Error", rf.me)
+			return
+	}
+
+	rf.currentTerm = currentTerm
+	rf.votedFor = votedFor
+	rf.log = log
+	
+	rf.commitIndex = len(rf.log) - 1
 	slog.Log(slog.LOG_INFO, "Raft[%d] has read persistent state: {currentTerm[%d], votedFor[%d], log[%+v]}",
 							rf.me, rf.currentTerm, rf.votedFor, rf.log)
 }
@@ -232,6 +245,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := true
 
 	// Your code here (2B).
+	slog.Log(slog.LOG_DEBUG, "Raft[%d] in Start will lock its mutex", rf.me)
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
@@ -248,8 +262,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		rf.log = append(rf.log, newEntry)
 		slog.Log(slog.LOG_DEBUG, "Raft[%d] will append new entry{Index: [%d], Term: [%d], Command:[%T | %v]",
 									rf.me, index, term, command, command)
-		
-		rf.persist()
 	}
 	// Your code here (2B).
 

@@ -26,10 +26,15 @@ func (rf *Raft) LeaderTryUpdateCommitIndex() {
 							  rf.me, matchIndexWithQuorum, rf.commitIndex, rf.log[matchIndexWithQuorum], rf.currentTerm)
 
 	if matchIndexWithQuorum > rf.commitIndex && rf.log[matchIndexWithQuorum].Term == rf.currentTerm {
-		for i := rf.commitIndex + 1; i <= matchIndexWithQuorum; i++ {
+		i := rf.commitIndex + 1
+		rf.commitIndex = matchIndexWithQuorum
+
+		rf.persist()
+
+		for ; i <= matchIndexWithQuorum; i++ {
 			rf.NotifyApplyChannel(true, rf.log[i].Command, i)
 		}
-		rf.commitIndex = matchIndexWithQuorum
+
 		slog.Log(slog.LOG_DEBUG, "Raft[%d] commitIndex has been updated to:[%d]",
 						   		  rf.me, rf.commitIndex)
 	}
@@ -66,7 +71,8 @@ func AppendEntriesProcessor(rf *Raft, peerIndex int) {
 	reply := &AppendEntriesReply{}
 	ok := rf.sendAppendEntries(peerIndex, appendEntriesArgs, reply)
 	if ok {
-		slog.Log(slog.LOG_DEBUG, "Raft[%d] will try to lock its mutex.", rf.me)
+		slog.Log(slog.LOG_INFO, "Raft[%d] sendAppendEntries to Raft[%d]: reply is {%v}.",
+								 rf.me, peerIndex, reply)
 		rf.mu.Lock()
 
 		if reply.Term > rf.currentTerm {
@@ -87,7 +93,15 @@ func AppendEntriesProcessor(rf *Raft, peerIndex int) {
 									  rf.me, peerIndex, reply.Success, peerIndex, rf.nextIndex[peerIndex])
 
 		} else {
-			// may need a smart way
+			if reply.ConflictIndex == -1 { 
+				// Packet delay because of the unreliable network
+				// And we will only care about the conflict situation.
+				slog.Log(slog.LOG_DEBUG, "Raft[%d] received a reply from Raft[%d]: {%v}. Might caused by unreliable network.",
+									  	  rf.me, peerIndex, reply)
+				rf.mu.Unlock()
+				return
+			}
+			// Met conlict in AppendEntries
 			rf.nextIndex[peerIndex] = reply.ConflictIndex
 			slog.Log(slog.LOG_INFO, "Raft[%d] to peer[%d] success:%t, rf.nextIndex dec to:[%d]",
 									 rf.me, peerIndex, reply.Success, rf.nextIndex[peerIndex])

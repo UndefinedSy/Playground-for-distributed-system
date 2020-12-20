@@ -32,6 +32,8 @@ func (rf *Raft) FollowerTryUpdateCommitIndex(leaderCommit int) {
 			rf.commitIndex = leaderCommit
 		}
 		
+		rf.persist()
+
 		// notify the client.
 		// ??? I'm not sure if this is necessary fot a follower ???
 		for i := tmpDPrintfCommitIndex + 1; i <= rf.commitIndex; i++ {
@@ -42,14 +44,28 @@ func (rf *Raft) FollowerTryUpdateCommitIndex(leaderCommit int) {
 	}
 }
 
+// func (rf *Raft) GetFirstIndexByTerm(targetTerm int) int {
+// 	// var targetIndex int // init?
+// 	targetIndex := 1
+// 	for i := len(rf.log) - 1; i > 0; i-- {
+// 		if rf.log[i].Term < targetTerm {
+// 			targetIndex = i + 1
+// 			break
+// 		}
+// 	}
+// 	return targetIndex
+// }
+
 func (rf *Raft) GetFirstIndexByTerm(targetTerm int) int {
-	var targetIndex int // init?
-	for i := len(rf.log) - 1; i >= 0; i-- {
-		if rf.log[i].Term < targetTerm {
-			targetIndex = i + 1
+	targetIndex := rf.commitIndex + 1
+
+	for ; targetIndex < len(rf.log); targetIndex++ {
+		if rf.log[targetIndex].Term >= targetTerm {
 			break
 		}
 	}
+	slog.Log(slog.LOG_DEBUG, "Raft[%d] need back up, targetTerm is:[%d], returns [%d]",
+							  rf.me, targetTerm, targetIndex)
 	return targetIndex
 }
 
@@ -62,8 +78,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 							 rf.me, rf.currentTerm, rf.currentRole, rf.currentLeader,
 							 args.LeaderId, args.Term, args.PrevLogIndex, args.PrevLogTerm, args.LeaderCommit, len(args.Entries))
 	defer func() {
-		slog.Log(slog.LOG_INFO, `Raft[%d] Return AppendEntries, currentTerm[%d] currentRole[%d] success:%t currentLeader[%d] commitIndex[%d]`,
-								 rf.me, rf.currentTerm, rf.currentRole, reply.Success, rf.currentLeader, rf.commitIndex)
+		slog.Log(slog.LOG_INFO, `Raft[%d] Return AppendEntries, currentTerm[%d] currentRole[%d] success:%t currentLeader[%d] commitIndex[%d] ConflictIndex[%d]`,
+								 rf.me, rf.currentTerm, rf.currentRole, reply.Success, rf.currentLeader, rf.commitIndex, reply.ConflictIndex)
 	}()
 
 	// init reply
@@ -93,7 +109,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if args.PrevLogIndex > GetLastLogIndex(rf) {
 		slog.Log(slog.LOG_INFO, "The args PrevLogIndex[%d] exceed the Raft[%d]'s lastLogIndex[%d], return false to go back.",
 								 args.PrevLogIndex, rf.me, GetLastLogIndex(rf))
-		reply.ConflictIndex = GetLastLogIndex(rf)
+		reply.ConflictIndex = GetLastLogIndex(rf) + 1
 		return
 	} 
 	
@@ -112,9 +128,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.log = append(rf.log, Entry)
 	}
 
-	if len(args.Entries) > 0 {
-		rf.persist()
-	}
+	// if len(args.Entries) > 0 {
+	// 	rf.persist()
+	// }
 
 	rf.FollowerTryUpdateCommitIndex(args.LeaderCommit)
 
