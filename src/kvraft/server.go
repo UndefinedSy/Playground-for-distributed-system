@@ -1,22 +1,14 @@
 package kvraft
 
 import (
-	"../labgob"
-	"../labrpc"
-	"log"
-	"../raft"
 	"sync"
 	"sync/atomic"
+
+	"../labgob"
+	"../labrpc"
+	"../raft"
+	"../slog"
 )
-
-const Debug = 0
-
-func DPrintf(format string, a ...interface{}) (n int, err error) {
-	if Debug > 0 {
-		log.Printf(format, a...)
-	}
-	return
-}
 
 
 type Op struct {
@@ -57,6 +49,7 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 // to suppress debug output from a Kill()ed instance.
 //
 func (kv *KVServer) Kill() {
+	slog.Log(slog.LOG_INFO, "KVServer[%d] has been killed", kv.me)
 	atomic.StoreInt32(&kv.dead, 1)
 	kv.rf.Kill()
 	// Your code here, if desired.
@@ -76,8 +69,8 @@ func (kv *KVServer) killed() bool {
 // implementation, which should call persister.SaveStateAndSnapshot() to
 // atomically save the Raft state along with the snapshot.
 // the k/v server should snapshot when Raft's saved state exceeds maxraftstate bytes,
-// in order to allow Raft to garbage-collect its log. if maxraftstate is -1,
-// you don't need to snapshot.
+// in order to allow Raft to garbage-collect its log. 
+// If maxraftstate is -1, you don't need to snapshot.
 // StartKVServer() must return quickly, so it should start goroutines
 // for any long-running work.
 //
