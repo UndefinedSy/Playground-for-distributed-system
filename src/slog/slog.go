@@ -1,12 +1,12 @@
 package slog
 
 import (
-  "fmt"
-  "log"
-  "strings"
-  "runtime"
- _"reflect"
-  "path/filepath"
+	"fmt"
+	"log"
+	"strings"
+	"runtime"
+	_"reflect"
+	"path/filepath"
 )
 
 type LogLevel int
@@ -34,13 +34,13 @@ func Log(logLevel LogLevel, formating string, args ...interface{}) {
 	if logLevel <= currentLogLevel {
 		var funcname string
 		pc, filename, line, ok := runtime.Caller(1)
-		// fmt.Println(reflect.TypeOf(pc), reflect.ValueOf(pc))
+		
 		if ok {
-			funcname = runtime.FuncForPC(pc).Name()       // main.(*MyStruct).foo
-			funcname = filepath.Ext(funcname)             // .foo
-			funcname = strings.TrimPrefix(funcname, ".")  // foo
+			funcname = runtime.FuncForPC(pc).Name()
+			funcname = filepath.Ext(funcname)
+			funcname = strings.TrimPrefix(funcname, ".")
 	  
-			filename = filepath.Base(filename)  // /full/path/basename.go => basename.go
+			filename = filepath.Base(filename)
 			
 			log.Printf("%s - %s:%d(%s): %s\n", logLevelString, filename, line, funcname, fmt.Sprintf(formating, args...))
 		} else {
