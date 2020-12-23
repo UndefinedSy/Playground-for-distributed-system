@@ -1,12 +1,21 @@
 package kvraft
 
-import "../labrpc"
-import "crypto/rand"
-import "math/big"
+import (
+	"sync"
+	"crypto/rand"
+	"math/big"
+
+	"../labrpc"
+	"../slog"
+)
 
 
 type Clerk struct {
-	servers []*labrpc.ClientEnd
+	servers 		[]*labrpc.ClientEnd
+	// You will have to modify this struct.
+	mu 				sync.Mutex
+	currentLeaderId int
+	ClerkId			int64
 	// You will have to modify this struct.
 }
 
@@ -21,7 +30,23 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
 	// You'll have to add code here.
+	ck.ClerkId = nrand()
+	// You'll have to add code here.
+
 	return ck
+}
+
+func (ck *Clerk) UpdateCurrentLeaderId(RPCReturnValue int) {
+	slog.Log(slog.LOG_INFO, "Clerk[%d] will update currentLeaderId[%d] with RPCReturnValue[%d]",
+							  ck.ClerkId, ck.currentLeaderId, RPCReturnValue)
+	ck.mu.Lock()
+	defer ck.mu.Unlock()
+
+	if RPCReturnValue < 0 {
+		ck.currentLeaderId = (ck.currentLeaderId + 1) % len(ck.servers)	// Round-Robin to the next server
+	} else {
+		ck.currentLeaderId = RPCReturnValue
+	}
 }
 
 //
@@ -37,9 +62,25 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 // arguments. and reply must be passed as a pointer.
 //
 func (ck *Clerk) Get(key string) string {
+	args := &GetArgs{}
+	args.Key = key
 
-	// You will have to modify this function.
-	return ""
+	for {
+		reply := &GetReply{}
+		ok := ck.servers[ck.currentLeaderId].Call("KVServer.Get", args, reply)
+		if !ok {	// cannot reach the kvserver
+			ck.UpdateCurrentLeaderId(-1)	// Round-Robin to the next server
+		} else {
+			switch reply.Err {
+			case OK:
+				return reply.Value
+			case ErrNoKey:
+				return ""
+			case ErrWrongLeader:
+				ck.UpdateCurrentLeaderId(reply.CurrentLeaderId)
+			}
+		}
+	}
 }
 
 //
@@ -54,6 +95,26 @@ func (ck *Clerk) Get(key string) string {
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	// You will have to modify this function.
+	args := &PutAppendArgs{}
+	args.Key 	= key
+	args.Value	= value
+	args.Op		= op
+
+	for {
+		reply := &PutAppendReply{}
+		ok := ck.servers[ck.currentLeaderId].Call("KVServer.PutAppend", args, reply)
+		if !ok {	// cannot reach the kvserver
+			ck.UpdateCurrentLeaderId(-1)	// Round-Robin to the next server
+		} else {
+			switch reply.Err {
+			case OK:
+				return
+			case ErrWrongLeader:
+				ck.UpdateCurrentLeaderId(reply.CurrentLeaderId)
+			}
+		}
+	}
+
 }
 
 func (ck *Clerk) Put(key string, value string) {
