@@ -34,3 +34,4 @@ This currently just prints the log messages to stdout like this:
 
 - [ ] Simple K/V store on Raft
 - [ ] Distributed in-memory Cache
+- [ ] A simple snowflake liked UID generator
