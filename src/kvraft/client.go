@@ -95,10 +95,11 @@ func (ck *Clerk) Get(key string) string {
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	// You will have to modify this function.
-	args := &PutAppendArgs{}
-	args.Key 	= key
-	args.Value	= value
-	args.Op		= op
+	args := &PutAppendArgs{
+		Key		: key,
+		Value	: value,
+		OpFlag	: op,
+	}
 
 	for {
 		reply := &PutAppendReply{}

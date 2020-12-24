@@ -197,6 +197,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 
 	if rf.currentRole != ROLE_LEADER {
 		isLeader = false
+		index = rf.currentLeader
 	} else {
 		index = len(rf.log)
 		term = rf.currentTerm

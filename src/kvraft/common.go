@@ -10,9 +10,9 @@ type Err string
 
 // Put or Append
 type PutAppendArgs struct {
-	Key   string
-	Value string
-	Op    string // "Put" or "Append"
+	Key		string
+	Value	string
+	OpFlag	string // "Put" or "Append"
 	//  Here need a UID to reprensent a certain request
 
 	// You'll have to add definitions here.

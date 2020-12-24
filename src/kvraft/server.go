@@ -10,8 +10,24 @@ import (
 	"../slog"
 )
 
+type OpTypeEnum int
+const (
+	GET 	OpTypeEnum = 0
+	PUT		OpTypeEnum = 1
+	APPEND	OpTypeEnum = 2
+)
 
 type Op struct {
+	// Your definitions here.
+
+	OpType	OpTypeEnum
+	Key		string
+	Value	string
+
+	OpIndex int
+	OpTerm	int
+	OpID	int64
+
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
@@ -28,6 +44,8 @@ type KVServer struct {
 
 	// Your definitions here.
 	kvStore	map[string]string
+	pended	map[int]*Op	// PENDED queue: Raft Entry Index -> Op
+
 	// Your definitions here.
 }
 
