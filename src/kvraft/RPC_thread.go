@@ -2,7 +2,10 @@ package kvraft
 
 import (
 	"../slog"
+	"time"
 )
+
+const RPC_TIMEOUT = 5 // (5s)
 
 type OpGenerator interface {
     GenerateOp() *Op
@@ -47,9 +50,27 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	if !isLeader {
 		reply.Err = ErrWrongLeader
 		reply.CurrentLeaderId = index
-	} else {
+	}
+	
+	kv.UpdatePendedQueue(index, term, kv.me, GeneratedOp)
+
+	// Cleanup: Remove current request from the pended queue whenever the request success or not.
+	defer kv.CleanupPendedRequest(index, GeneratedOp.OpLeader)
+
+	TimeoutTimer := time.NewTimer(RPC_TIMEOUT * time.Second)
+
+	select {
+	case <-TimeoutTimer.C:
+		// might the request has been removed or discarded.
+		slog.Log(slog.LOG_INFO, "KVServer[%d] Request[%d] Timeout, will return Err to let the client retry",
+								kv.me, index)
+		reply.Err = ErrAgain
+	case <-GeneratedOp.CommitedChan:
+		slog.Log(slog.LOG_INFO, "KVServer[%d] Request[%d] has been committed",
+								kv.me, index)
 		reply.Err = OK
-		reply.Value = "TEST_GET_OK"
+		reply.Value = //  TODO
+		// GET related logic has been handled in RPC thread.
 	}
 }
 
@@ -70,9 +91,25 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 		return
 	} 
 
-	GeneratedOp.OpIndex = index
-	GeneratedOp.OpTerm = term	// is this necessary? maybe just need a UID
-	GeneratedOp.OpIndex = 0 // TODO here need a uniqueID generator.
+	kv.UpdatePendedQueue(index, term, kv.me, GeneratedOp)
+
+	// Cleanup: Remove current request from the pended queue whenever the request success or not.
+	defer kv.CleanupPendedRequest(index, GeneratedOp.OpLeader)
+
+	TimeoutTimer := time.NewTimer(RPC_TIMEOUT * time.Second)
+
+	select {
+	case <-TimeoutTimer.C:
+		// might the request has been removed or discarded.
+		slog.Log(slog.LOG_INFO, "KVServer[%d] Request[%d] Timeout, will return Err to let the client retry",
+								kv.me, index)
+		reply.Err = ErrAgain
+	case <-GeneratedOp.CommitedChan:
+		slog.Log(slog.LOG_INFO, "KVServer[%d] Request[%d] has been committed",
+								kv.me, index)
+		reply.Err = OK
+		// PutAppend related logic has been handled in RPC thread.
+	}
 
 	// TODO: This part should be refactored to a general logic: (GET the same logic)
 	// kick off request 
@@ -81,9 +118,37 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// -> wait for notification of committed 
 	// -> send back response
 
+	
+
 	// then need to put this RPC request into a queue
 	// and there will be a REC thread to monitor all PENDED request
 	// if a log has been committed, then RPC thread will apply it to the in-memory table and return.
 	
 }
 
+func (kv *KVServer) UpdatePendedQueue(index int, term int, leaderId int, GeneratedOp *Op) {
+	GeneratedOp.OpIndex = index
+	GeneratedOp.OpTerm = term	// is this necessary? maybe just need a UID
+	GeneratedOp.OpLeader = leaderId
+	// TODO here need a uniqueID generator.
+	GeneratedOp.CommitedChan = make(chan bool)
+
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	kv.pended[index] = GeneratedOp
+}
+
+// Remove current request from the pended queue whenever the request success or not.
+func (kv *KVServer) CleanupPendedRequest(index int, OpLeaderId int) {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+	
+	if val, ok := kv.pended[index]; ok {
+		if val.OpLeader == OpLeaderId {
+			slog.Log(LOG_INFO, "KVServer[%d] will cleanup its pended request (index[%d])",
+						kv.me, index)
+			delete(kv.pended, index)
+		}
+	}
+}

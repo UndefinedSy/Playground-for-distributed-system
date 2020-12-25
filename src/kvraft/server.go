@@ -20,13 +20,15 @@ const (
 type Op struct {
 	// Your definitions here.
 
-	OpType	OpTypeEnum
-	Key		string
-	Value	string
+	OpType		 OpTypeEnum
+	Key			 string
+	Value		 string
 
-	OpIndex int
-	OpTerm	int
-	OpID	int64
+	OpIndex 	 int
+	OpTerm		 int
+	OpLeader	 int
+	// OpID	int64
+	CommitedChan chan bool
 
 	// Your definitions here.
 	// Field names must start with capital letters,
@@ -101,6 +103,8 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
 	kv.kvStore = make(map[string]string)
+	kv.pended = make(map[int]*Op)
+	pended	map[int]*Op
 	// You may need initialization code here.
 
 	return kv
