@@ -43,3 +43,6 @@ Create a Raft server.
 - [ ] Cluster Membership Change Mechanism
 - [ ] Log Compaction / SnapShot
 - [ ] Move the Persister to a real persistent I/O
+  
+# ISSUEs
+- [ ] When log level switch to LOG_INFO/LOG_DEBUG, there will be too mant logs to print and maybe break the timing, which will cause test failed.
