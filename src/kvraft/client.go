@@ -15,7 +15,7 @@ type Clerk struct {
 	// You will have to modify this struct.
 	mu 				sync.Mutex
 	currentLeaderId int
-	ClerkId			int64
+	// ClerkId			int64
 	// You will have to modify this struct.
 }
 
@@ -30,23 +30,25 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
 	// You'll have to add code here.
-	ck.ClerkId = nrand()
+	// ck.ClerkId = nrand()
 	// You'll have to add code here.
 
 	return ck
 }
 
 func (ck *Clerk) UpdateCurrentLeaderId(RPCReturnValue int) {
-	slog.Log(slog.LOG_INFO, "Clerk[%d] will update currentLeaderId[%d] with RPCReturnValue[%d]",
-							  ck.ClerkId, ck.currentLeaderId, RPCReturnValue)
+	slog.Log(slog.LOG_INFO, "Clerk will update currentLeaderId[%d] with RPCReturnValue[%d]",
+							 ck.currentLeaderId, RPCReturnValue)
 	ck.mu.Lock()
 	defer ck.mu.Unlock()
 
-	if RPCReturnValue < 0 {
-		ck.currentLeaderId = (ck.currentLeaderId + 1) % len(ck.servers)	// Round-Robin to the next server
-	} else {
-		ck.currentLeaderId = RPCReturnValue
-	}
+	ck.currentLeaderId = (ck.currentLeaderId + 1) % len(ck.servers)	// Round-Robin to the next server
+	// Bad news, seems that the instance identifier is not the same as the index of the ck.servers
+	// if RPCReturnValue < 0 {
+	// 	ck.currentLeaderId = (ck.currentLeaderId + 1) % len(ck.servers)	// Round-Robin to the next server
+	// } else {
+	// 	ck.currentLeaderId = RPCReturnValue
+	// }
 }
 
 //
@@ -112,6 +114,8 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 				return
 			case ErrWrongLeader:
 				ck.UpdateCurrentLeaderId(reply.CurrentLeaderId)
+			case ErrAgain:
+				slog.Log(slog.LOG_DEBUG, "Retry on the same server.")
 			}
 		}
 	}

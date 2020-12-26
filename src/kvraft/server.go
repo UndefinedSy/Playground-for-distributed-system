@@ -20,16 +20,17 @@ const (
 type Op struct {
 	// Your definitions here.
 
-	OpType		 OpTypeEnum
-	Key			 string
-	Value		 string
+	OpType		 	OpTypeEnum
+	Key			 	string
+	Value		 	string
 
-	OpIndex 	 int
-	OpTerm		 int
-	OpLeader	 int
-	// OpID	int64
-	CommitedChan chan bool
+	OpIndex 	 	int
+	OpLeader	 	int
+	OpID		 	int64
 
+	CommitedChan 	chan bool
+
+	OpLeaderChanged	bool
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
@@ -104,7 +105,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	kv.kvStore = make(map[string]string)
 	kv.pended = make(map[int]*Op)
-	pended	map[int]*Op
+
 	// You may need initialization code here.
 
 	return kv
